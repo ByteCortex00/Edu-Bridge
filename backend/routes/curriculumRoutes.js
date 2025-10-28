@@ -7,11 +7,18 @@ import {
   updateCurriculum,
   deleteCurriculum,
   addCourse,
-  getCurriculumSkills
+  getCurriculumSkills,
+  generateCurriculumEmbeddings,
+  getCurriculumEmbeddingStatus,
+  regenerateCurriculumEmbedding
 } from '../controllers/curriculumController.js';
 import { protect, authorize } from '../middleware/auth.js';
 
 const router = express.Router();
+
+router.post('/generate-embeddings', generateCurriculumEmbeddings);
+router.get('/embedding-status', getCurriculumEmbeddingStatus);
+router.post('/:id/regenerate-embedding', regenerateCurriculumEmbedding);
 
 // Public routes
 router.get('/', getCurricula);

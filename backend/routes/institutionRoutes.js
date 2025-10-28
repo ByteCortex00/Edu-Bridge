@@ -15,7 +15,7 @@ const router = express.Router();
 // Public routes
 router.get('/', getInstitutions);
 router.get('/:id', getInstitution);
-router.get('/:id/stats', getInstitutionStats);
+router.get('/:id/stats', getInstitutionStats); // requires debugging
 
 // Protected routes (Admin/Institution roles)
 router.post('/', protect, authorize('admin', 'institution'), createInstitution);

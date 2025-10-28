@@ -5,19 +5,36 @@ import {
   getAllJobs,
   getJobById,
   getJobStats,
-  deleteJob
+  deleteJob,
+  getAdzunaCategories,
+  bulkPopulateJobs,
+  getJobCategories,
+  generateJobEmbeddings,  // ✅ ADDED
+  getEmbeddingStatus,      // ✅ ADDED 
+  testMLService
+
 } from '../controllers/jobController.js';
 import { protect, authorize } from '../middleware/auth.js';
 
 const router = express.Router();
 
-// Public routes
-router.get('/', getAllJobs);
-router.get('/:id', getJobById);
-router.get('/stats/overview', getJobStats);
+// ✅ PUT SPECIFIC ROUTES FIRST
+router.get('/test-ml', testMLService);
+router.get('/embedding-status', getEmbeddingStatus);
+router.post('/generate-embeddings', generateJobEmbeddings);
 
-// Protected routes (Admin/Institution roles)
-router.post('/fetch', protect, authorize('admin', 'institution'), fetchJobsFromAdzuna);
-router.delete('/:id', protect, authorize('admin'), deleteJob);
+// ✅ THEN GENERAL ROUTES
+router.get('/categories', getJobCategories);
+router.get('/adzuna-categories', getAdzunaCategories);
+router.get('/fetch', fetchJobsFromAdzuna);
+router.post('/bulk-populate', bulkPopulateJobs);
+router.get('/', getAllJobs);
+router.get('/stats', getJobStats);
+
+// ✅ PUT PARAMETERIZED ROUTES LAST
+router.get('/:id', getJobById);
+router.delete('/:id', deleteJob);
+
+
 
 export default router;

@@ -1,6 +1,8 @@
 // backend/controllers/curriculumController.js
 import Curriculum from '../models/curriculumModel.js';
 import Course from '../models/coursesModel.js';
+import Institution from '../models/institutionModel.js';
+import mlService from '../services/mlService.js'; // ✅ ADD THIS IMPORT
 
 /**
  * @desc    Get all curricula
@@ -45,12 +47,7 @@ export const getCurriculum = async (req, res) => {
   try {
     const curriculum = await Curriculum.findById(req.params.id)
       .populate('institutionId')
-      .populate({
-        path: 'courses',
-        populate: {
-          path: 'skills'
-        }
-      });
+      .populate('courses');
 
     if (!curriculum) {
       return res.status(404).json({
@@ -73,6 +70,7 @@ export const getCurriculum = async (req, res) => {
 };
 
 /**
+ * ✅ UPDATED: Create new curriculum WITH embedding generation
  * @desc    Create new curriculum
  * @route   POST /api/curricula
  * @access  Private (Admin/Institution)
@@ -86,6 +84,35 @@ export const createCurriculum = async (req, res) => {
       req.body.institutionId,
       { $push: { activePrograms: curriculum._id } }
     );
+
+    // ✅ NEW: Generate embedding for the curriculum
+    try {
+      if (mlService.isModelReady()) {
+        console.log(`🔄 Generating embedding for curriculum: ${curriculum.programName}`);
+        
+        // Populate courses to build comprehensive text
+        await curriculum.populate('courses');
+        
+        const curriculumText = await curriculum.getTextForEmbedding();
+        const embedding = await mlService.generateEmbedding(curriculumText);
+        
+        curriculum.embedding = embedding;
+        curriculum.embeddingGenerated = new Date();
+        curriculum.embeddingVersion = 'v1';
+        curriculum.embeddingError = null;
+        
+        await curriculum.save();
+        
+        console.log(`✅ Embedding generated for curriculum: ${curriculum.programName}`);
+      } else {
+        console.log(`⚠️  ML model not ready, curriculum saved without embedding`);
+      }
+    } catch (embeddingError) {
+      console.error(`❌ Failed to generate embedding for curriculum:`, embeddingError.message);
+      curriculum.embeddingError = embeddingError.message;
+      await curriculum.save();
+      // Continue - don't fail the creation if embedding fails
+    }
 
     res.status(201).json({
       success: true,
@@ -102,6 +129,7 @@ export const createCurriculum = async (req, res) => {
 };
 
 /**
+ * ✅ UPDATED: Update curriculum WITH embedding regeneration
  * @desc    Update curriculum
  * @route   PUT /api/curricula/:id
  * @access  Private (Admin/Institution)
@@ -119,6 +147,33 @@ export const updateCurriculum = async (req, res) => {
         success: false,
         message: 'Curriculum not found'
       });
+    }
+
+    // ✅ NEW: Regenerate embedding after update
+    try {
+      if (mlService.isModelReady()) {
+        console.log(`🔄 Regenerating embedding for updated curriculum: ${curriculum.programName}`);
+        
+        // Populate courses to build comprehensive text
+        await curriculum.populate('courses');
+        
+        const curriculumText = await curriculum.getTextForEmbedding();
+        const embedding = await mlService.generateEmbedding(curriculumText);
+        
+        curriculum.embedding = embedding;
+        curriculum.embeddingGenerated = new Date();
+        curriculum.embeddingVersion = 'v1';
+        curriculum.embeddingError = null;
+        
+        await curriculum.save();
+        
+        console.log(`✅ Embedding regenerated for curriculum: ${curriculum.programName}`);
+      }
+    } catch (embeddingError) {
+      console.error(`❌ Failed to regenerate embedding:`, embeddingError.message);
+      curriculum.embeddingError = embeddingError.message;
+      await curriculum.save();
+      // Continue - don't fail the update if embedding fails
     }
 
     res.status(200).json({
@@ -182,16 +237,40 @@ export const deleteCurriculum = async (req, res) => {
  */
 export const addCourse = async (req, res) => {
   try {
-    const { curriculumId } = req.params;
+    const { id: curriculumId } = req.params;
     const courseData = { ...req.body, curriculumId };
 
     const course = await Course.create(courseData);
 
     // Add course to curriculum
-    await Curriculum.findByIdAndUpdate(
+    const curriculum = await Curriculum.findByIdAndUpdate(
       curriculumId,
-      { $push: { courses: course._id } }
+      { $push: { courses: course._id } },
+      { new: true }
     );
+
+    // ✅ NEW: Regenerate curriculum embedding since courses changed
+    try {
+      if (mlService.isModelReady() && curriculum) {
+        console.log(`🔄 Regenerating embedding after adding course to: ${curriculum.programName}`);
+        
+        await curriculum.populate('courses');
+        
+        const curriculumText = await curriculum.getTextForEmbedding();
+        const embedding = await mlService.generateEmbedding(curriculumText);
+        
+        curriculum.embedding = embedding;
+        curriculum.embeddingGenerated = new Date();
+        curriculum.embeddingError = null;
+        
+        await curriculum.save();
+        
+        console.log(`✅ Embedding regenerated after course addition`);
+      }
+    } catch (embeddingError) {
+      console.error(`❌ Failed to regenerate embedding:`, embeddingError.message);
+      // Continue - don't fail the course addition if embedding fails
+    }
 
     res.status(201).json({
       success: true,
@@ -261,6 +340,194 @@ export const getCurriculumSkills = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Server error fetching curriculum skills'
+    });
+  }
+};
+
+// ✅ NEW ENDPOINTS FOR EMBEDDING MANAGEMENT
+
+/**
+ * @desc    Generate embeddings for existing curricula without them
+ * @route   POST /api/curricula/generate-embeddings
+ * @access  Private
+ */
+export const generateCurriculumEmbeddings = async (req, res) => {
+  try {
+    const { forceRegenerate = false } = req.body;
+
+    console.log(`🔄 Starting embedding generation for curricula...`);
+
+    // Build query for curricula needing embeddings
+    const query = forceRegenerate 
+      ? {} 
+      : { 
+          $or: [
+            { embedding: { $exists: false } },
+            { embedding: null },
+            { embedding: { $size: 0 } }
+          ]
+        };
+
+    const curricula = await Curriculum.find(query)
+      .populate('courses')
+      .select('programName description embedding embeddingGenerated courses');
+
+    if (curricula.length === 0) {
+      return res.status(200).json({
+        success: true,
+        message: 'No curricula need embedding generation',
+        stats: { processed: 0, succeeded: 0, failed: 0 }
+      });
+    }
+
+    console.log(`📊 Found ${curricula.length} curricula needing embeddings`);
+
+    let succeeded = 0;
+    let failed = 0;
+    const errors = [];
+
+    for (const curriculum of curricula) {
+      try {
+        const curriculumText = await curriculum.getTextForEmbedding();
+        
+        if (!curriculumText || curriculumText.trim().length < 20) {
+          console.log(`⚠️  Skipping curriculum ${curriculum._id}: insufficient text for embedding`);
+          continue;
+        }
+
+        const embedding = await mlService.generateEmbedding(curriculumText);
+        
+        // Update curriculum with embedding
+        await Curriculum.findByIdAndUpdate(curriculum._id, {
+          embedding,
+          embeddingGenerated: new Date(),
+          embeddingVersion: 'v1',
+          embeddingError: null
+        });
+
+        succeeded++;
+        console.log(`✅ Embedded curriculum ${succeeded}/${curricula.length}: ${curriculum.programName}`);
+
+      } catch (error) {
+        failed++;
+        errors.push(`Curriculum ${curriculum._id}: ${error.message}`);
+        
+        // Mark curriculum as having embedding error
+        await Curriculum.findByIdAndUpdate(curriculum._id, {
+          embeddingError: error.message
+        });
+
+        console.error(`❌ Failed to embed curriculum ${curriculum._id}:`, error.message);
+      }
+
+      // Small delay between curricula
+      await new Promise(resolve => setTimeout(resolve, 200));
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `Embedding generation completed: ${succeeded} succeeded, ${failed} failed`,
+      stats: {
+        total: curricula.length,
+        processed: succeeded + failed,
+        succeeded,
+        failed
+      },
+      errors: errors.slice(0, 10)
+    });
+
+  } catch (error) {
+    console.error('Generate curriculum embeddings error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to generate curriculum embeddings',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * @desc    Get embedding generation status for curricula
+ * @route   GET /api/curricula/embedding-status
+ * @access  Private
+ */
+export const getCurriculumEmbeddingStatus = async (req, res) => {
+  try {
+    const totalCurricula = await Curriculum.countDocuments();
+    const curriculaWithEmbeddings = await Curriculum.countDocuments({ 
+      embedding: { $exists: true, $ne: null, $not: { $size: 0 } }
+    });
+    const curriculaWithErrors = await Curriculum.countDocuments({ 
+      embeddingError: { $exists: true, $ne: null }
+    });
+
+    const mlStatus = mlService.getStatus();
+
+    res.status(200).json({
+      success: true,
+      data: {
+        mlService: mlStatus,
+        embeddings: {
+          totalCurricula,
+          curriculaWithEmbeddings,
+          curriculaWithErrors,
+          coveragePercentage: totalCurricula > 0 ? (curriculaWithEmbeddings / totalCurricula) * 100 : 0,
+          errorPercentage: totalCurricula > 0 ? (curriculaWithErrors / totalCurricula) * 100 : 0
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Get curriculum embedding status error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch curriculum embedding status'
+    });
+  }
+};
+
+/**
+ * @desc    Manually regenerate embedding for specific curriculum
+ * @route   POST /api/curricula/:id/regenerate-embedding
+ * @access  Private
+ */
+export const regenerateCurriculumEmbedding = async (req, res) => {
+  try {
+    const curriculum = await Curriculum.findById(req.params.id).populate('courses');
+
+    if (!curriculum) {
+      return res.status(404).json({
+        success: false,
+        message: 'Curriculum not found'
+      });
+    }
+
+    const curriculumText = await curriculum.getTextForEmbedding();
+    const embedding = await mlService.generateEmbedding(curriculumText);
+    
+    curriculum.embedding = embedding;
+    curriculum.embeddingGenerated = new Date();
+    curriculum.embeddingVersion = 'v1';
+    curriculum.embeddingError = null;
+    
+    await curriculum.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Embedding regenerated successfully',
+      data: {
+        curriculumId: curriculum._id,
+        programName: curriculum.programName,
+        embeddingGenerated: curriculum.embeddingGenerated,
+        embeddingDimensions: embedding.length
+      }
+    });
+
+  } catch (error) {
+    console.error('Regenerate curriculum embedding error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to regenerate embedding',
+      error: error.message
     });
   }
 };
