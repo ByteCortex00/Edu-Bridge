@@ -16,23 +16,28 @@ export function LoginForm() {
     e.preventDefault();
     setError('');
     setLoading(true);
+    console.log('🔐 Frontend: Starting login for:', email);
 
     try {
       const response = await authAPI.login(email, password);
-      
+      console.log('📥 Frontend: Login response:', response);
+
       if (response.success) {
+        console.log('✅ Frontend: Login successful, setting auth and navigating to /dashboard');
         // 1. Set the new auth state
         setAuth(response.data.user, response.data.token);
-        
+
         // 2. CRITICAL FIX: Introduce a 50ms delay
-        await new Promise(resolve => setTimeout(resolve, 50)); 
+        await new Promise(resolve => setTimeout(resolve, 50));
 
         // 3. Navigate only after persistence is complete
         navigate('/dashboard');
       } else {
+        console.log('❌ Frontend: Login failed:', response.message);
         setError(response.message || 'Login failed');
       }
     } catch (err) {
+      console.log('❌ Frontend: Login error:', err.message);
       setError(err.message || 'Login failed');
     } finally {
       setLoading(false);

@@ -10,28 +10,31 @@ class AuthService {
   async register(userData) {
     try {
       const { name, email, password, role, institutionId } = userData;
-      
+      console.log('📝 Registration attempt for email:', email, 'role:', role);
+
       // Check if user already exists
       const existingUser = await User.findOne({ email });
       if (existingUser) {
+        console.log('❌ User already exists:', email);
         return {
           success: false,
           message: 'User already exists with this email'
         };
       }
-      
+
       // CRITICAL FIX: Pass plain-text password. Hashing is done by userModel.pre('save').
       const user = await User.create({
         name,
         email,
-        password: password, 
+        password: password,
         role,
         institutionId
       });
-      
+
       // Generate token
       const token = this.generateToken(user);
-      
+      console.log('✅ Registration successful for user:', email);
+
       return {
         success: true,
         data: {
@@ -46,6 +49,7 @@ class AuthService {
         }
       };
     } catch (error) {
+      console.log('❌ Registration error:', error.message);
       // Use error handler middleware for validation errors
       return {
         success: false,
@@ -59,28 +63,32 @@ class AuthService {
    */
   async login(email, password) {
     try {
+      console.log('🔐 Login attempt for email:', email);
       // Check if user exists
       const user = await User.findOne({ email });
       if (!user) {
+        console.log('❌ User not found for email:', email);
         return {
           success: false,
           message: 'Invalid credentials'
         };
       }
-      
+
       // Use the model's method to compare the entered password with the hashed one
-      const isMatch = await user.matchPassword(password); 
-      
+      const isMatch = await user.matchPassword(password);
+
       if (!isMatch) {
+        console.log('❌ Password mismatch for user:', email);
         return {
           success: false,
           message: 'Invalid credentials'
         };
       }
-      
+
       // Generate token
       const token = this.generateToken(user);
-      
+      console.log('✅ Login successful for user:', email);
+
       return {
         success: true,
         data: {
@@ -95,6 +103,7 @@ class AuthService {
         }
       };
     } catch (error) {
+      console.log('❌ Login error:', error.message);
       return {
         success: false,
         message: error.message

@@ -39,19 +39,23 @@ export function RegisterForm() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    console.log('📝 Frontend: Starting registration for:', formData.email);
 
     if (formData.password !== formData.confirmPassword) {
+      console.log('❌ Frontend: Passwords do not match');
       setError('Passwords do not match');
       return;
     }
 
     if (formData.password.length < 6) {
+      console.log('❌ Frontend: Password too short');
       setError('Password must be at least 6 characters');
       return;
     }
-    
+
     // Conditional validation: Institution ID is REQUIRED for 'institution' role
     if (formData.role === 'institution' && !formData.institutionId) {
+      console.log('❌ Frontend: Institution required for institution role');
       setError('Please select an institution to register with this role.');
       return;
     }
@@ -67,19 +71,24 @@ export function RegisterForm() {
         // Only send institutionId if the role is 'institution'
         institutionId: formData.role === 'institution' ? formData.institutionId : undefined,
       };
+      console.log('📤 Frontend: Sending registration payload:', payload);
 
       const response = await authAPI.register(payload);
+      console.log('📥 Frontend: Registration response:', response);
 
       if (response.success) {
+        console.log('✅ Frontend: Registration successful, navigating to /login');
         alert('Registration successful! Please login.');
         // FIX: Add the delay here as well to prevent the registration redirect loop
-        await new Promise(resolve => setTimeout(resolve, 50)); 
+        await new Promise(resolve => setTimeout(resolve, 50));
         navigate('/login');
       } else {
+        console.log('❌ Frontend: Registration failed:', response.message);
         // This catches custom error messages returned by the backend (e.g., email already exists)
         setError(response.message || 'Registration failed');
       }
     } catch (err) {
+      console.log('❌ Frontend: Registration error:', err.message);
       // This catches 400 Bad Request if validation fails on the server
       setError(err.message || 'Registration failed');
     } finally {

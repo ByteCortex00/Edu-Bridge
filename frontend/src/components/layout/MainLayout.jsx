@@ -19,6 +19,7 @@ export function MainLayout() {
   const navigate = useNavigate();
 
   const handleLogout = () => {
+    console.log('🚪 Frontend: Logout initiated, clearing auth and navigating to /login');
     clearAuth();
     navigate('/login');
   };
