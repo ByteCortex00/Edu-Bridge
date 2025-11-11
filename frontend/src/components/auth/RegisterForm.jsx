@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authAPI } from '../../api/auth';
 import { institutionsAPI } from '../../api/institutions';
+import { useAuthStore } from '../../store/authStore';
 import { UserPlus } from 'lucide-react';
 
 export function RegisterForm() {
@@ -18,6 +19,7 @@ export function RegisterForm() {
   const [loading, setLoading] = useState(false);
   const [loadingInstitutions, setLoadingInstitutions] = useState(true);
   const navigate = useNavigate();
+  const setAuth = useAuthStore((state) => state.setAuth);
 
   // Load institutions on component mount
   useEffect(() => {
@@ -77,11 +79,12 @@ export function RegisterForm() {
       console.log('📥 Frontend: Registration response:', response);
 
       if (response.success) {
-        console.log('✅ Frontend: Registration successful, navigating to /login');
-        alert('Registration successful! Please login.');
+        console.log('✅ Frontend: Registration successful, auto-logging in and navigating to /dashboard');
+        // Auto-login after registration
+        setAuth(response.data.user, response.data.token);
         // FIX: Add the delay here as well to prevent the registration redirect loop
         await new Promise(resolve => setTimeout(resolve, 50));
-        navigate('/login');
+        navigate('/dashboard');
       } else {
         console.log('❌ Frontend: Registration failed:', response.message);
         // This catches custom error messages returned by the backend (e.g., email already exists)
