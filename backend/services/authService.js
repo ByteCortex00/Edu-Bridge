@@ -20,15 +20,11 @@ class AuthService {
         };
       }
       
-      // Hash password
-      const salt = await bcrypt.genSalt(10);
-      const hashedPassword = await bcrypt.hash(password, salt);
-      
-      // Create user
+      // CRITICAL FIX: Pass plain-text password. Hashing is done by userModel.pre('save').
       const user = await User.create({
         name,
         email,
-        password: hashedPassword,
+        password: password, 
         role,
         institutionId
       });
@@ -50,6 +46,7 @@ class AuthService {
         }
       };
     } catch (error) {
+      // Use error handler middleware for validation errors
       return {
         success: false,
         message: error.message
@@ -71,8 +68,9 @@ class AuthService {
         };
       }
       
-      // Check password
-      const isMatch = await bcrypt.compare(password, user.password);
+      // Use the model's method to compare the entered password with the hashed one
+      const isMatch = await user.matchPassword(password); 
+      
       if (!isMatch) {
         return {
           success: false,
