@@ -8,6 +8,7 @@ import { Institutions } from './pages/Institutions';
 import { Curricula } from './pages/Curricula';
 import { Jobs } from './pages/Jobs';
 import { Analytics } from './pages/Analytics';
+import { Analysis } from './pages/Analysis';
 import { Settings } from './pages/Settings';
 import { useAuthStore } from './store/authStore';
 
@@ -38,6 +39,7 @@ function App() {
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="institutions" element={<Institutions />} />
           <Route path="curricula" element={<Curricula />} />
+          <Route path="analysis/:id" element={<Analysis />} />
           <Route path="jobs" element={<Jobs />} />
           <Route path="analytics" element={<Analytics />} />
           <Route path="settings" element={<Settings />} />

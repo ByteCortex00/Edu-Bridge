@@ -35,7 +35,7 @@ router.get('/top-skills', getTopSkills);
 router.get('/debug-similarity/:curriculumId', protect, debugSimilarity)
 // Protected routes
 router.post('/analyze/:curriculumId', protect, analyzeSkillsGap);
-router.get('/latest/:curriculumId', protect, getLatestAnalysis);
+router.get('/latest/:curriculumId', getLatestAnalysis);
 router.get('/trends/:curriculumId', protect, getGapTrends);
 router.post('/compare', protect, comparePrograms);
 router.get('/dashboard/:institutionId', protect, getDashboardOverview);
