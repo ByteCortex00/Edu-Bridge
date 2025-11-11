@@ -3,31 +3,31 @@ import { apiClient } from './client';
 export const jobsAPI = {
   getAll: async (params) => {
     const response = await apiClient.get('/jobs', { params });
-    return response.data;
+    return response;
   },
 
   getById: async (id) => {
     const response = await apiClient.get(`/jobs/${id}`);
-    return response.data;
+    return response;
   },
 
   getStats: async () => {
     const response = await apiClient.get('/jobs/stats');
-    return response.data;
+    return response;
   },
 
   getCategories: async () => {
     const response = await apiClient.get('/jobs/categories');
-    return response.data;
+    return response;
   },
 
   fetchFromAdzuna: async (params) => {
     const response = await apiClient.get('/jobs/fetch', { params });
-    return response.data;
+    return response;
   },
 
   bulkPopulate: async (config) => {
     const response = await apiClient.post('/jobs/bulk-populate', config);
-    return response.data;
+    return response;
   }
 };

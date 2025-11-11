@@ -3,12 +3,12 @@ import { apiClient } from './client';
 export const institutionsAPI = {
   getAll: async (params) => {
     const response = await apiClient.get('/institutions', { params });
-    return response.data;
+    return response;
   },
 
   getById: async (id) => {
     const response = await apiClient.get(`/institutions/${id}`);
-    return response.data;
+    return response;
   },
 
   create: async (data) => {
@@ -21,7 +21,7 @@ export const institutionsAPI = {
       },
       contactEmail: data.contactEmail
     });
-    return response.data;
+    return response;
   },
 
   update: async (id, data) => {
@@ -34,16 +34,16 @@ export const institutionsAPI = {
       },
       contactEmail: data.contactEmail
     });
-    return response.data;
+    return response;
   },
 
   delete: async (id) => {
     const response = await apiClient.delete(`/institutions/${id}`);
-    return response.data;
+    return response;
   },
 
   getStats: async (id) => {
     const response = await apiClient.get(`/institutions/${id}/stats`);
-    return response.data;
+    return response;
   }
 };

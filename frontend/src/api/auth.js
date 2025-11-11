@@ -4,7 +4,7 @@ import { apiClient } from './client';
 export const authAPI = {
   login: async (email, password) => {
     const response = await apiClient.post('/auth/login', { email, password });
-    return response.data;
+    return response;
   },
 
   register: async (userData) => {
@@ -15,7 +15,7 @@ export const authAPI = {
       role: userData.role,
       institutionId: userData.institutionId
     });
-    return response.data;
+    return response;
   },
 
   getCurrentUser: async () => {

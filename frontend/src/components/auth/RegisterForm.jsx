@@ -151,7 +151,7 @@ export function RegisterForm() {
               onChange={handleInputChange}
               required
               autoComplete="name" 
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
               placeholder="John Doe"
             />
           </div>
@@ -168,7 +168,7 @@ export function RegisterForm() {
               onChange={handleInputChange}
               required
               autoComplete="email" 
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
               placeholder="user@example.com"
             />
           </div>
@@ -185,7 +185,7 @@ export function RegisterForm() {
               onChange={handleInputChange}
               required
               autoComplete="new-password"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
               placeholder="••••••••"
             />
           </div>
@@ -202,7 +202,7 @@ export function RegisterForm() {
               onChange={handleInputChange}
               required
               autoComplete="new-password"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
               placeholder="••••••••"
             />
           </div>
@@ -217,7 +217,7 @@ export function RegisterForm() {
               value={formData.role}
               onChange={handleInputChange}
               required
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
             >
               <option value="viewer">Viewer (General Access)</option>
               <option value="institution">Institution User (Curriculum Management)</option>
@@ -235,7 +235,7 @@ export function RegisterForm() {
                 value={formData.institutionId}
                 onChange={handleInputChange}
                 required={isInstitutionRole}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
               >
                 {institutions.length === 0 ? (
                   <option value="">No Institutions Found</option>
