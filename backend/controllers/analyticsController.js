@@ -7,6 +7,10 @@ import skillsExtractor from '../services/skillExtractor.js';
 import mlService from '../services/mlService.js';
 import { mlConfig } from '../config/mlConfig.js';
 
+// Simple in-memory cache for top skills (5 minute TTL)
+const skillsCache = new Map();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
 /**
  * @desc    Run skills gap analysis for a curriculum
  * @route   POST /api/analytics/analyze/:curriculumId
@@ -404,41 +408,75 @@ export const getGapTrends = async (req, res) => {
 };
 
 /**
- * @desc    Get top in-demand skills from job market
+ * @desc    Get top in-demand skills, grouped by job category
  * @route   GET /api/analytics/top-skills
  * @access  Public
  */
 export const getTopSkills = async (req, res) => {
   try {
-    const { 
-      category, 
-      limit = 20, 
+    const {
+      category = 'all', // 'all' or a specific category
+      limit = 10,     // Skills per category
       daysBack = 90,
-      minDemand = 0 
+      minDemand = 0     // Minimum skill count
     } = req.query;
 
-    // Build date filter
-    const dateFilter = {
+    const limitNum = parseInt(limit);
+    const daysNum = parseInt(daysBack);
+    const minDemandNum = parseInt(minDemand);
+
+    // Check cache for popular queries
+    const cacheKey = `topSkills_${category}_${daysNum}_${limitNum}_${minDemandNum}`;
+    const cached = skillsCache.get(cacheKey);
+
+    if (cached && (Date.now() - cached.timestamp) < CACHE_TTL) {
+      console.log('📋 Serving top skills from cache');
+      return res.status(200).json(cached.data);
+    }
+
+    // 1. Base Match Stage (Date and optional Category)
+    const baseMatch = {
       postedDate: {
-        $gte: new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000)
+        $gte: new Date(Date.now() - daysNum * 24 * 60 * 60 * 1000)
       }
     };
+    if (category && category !== 'all') {
+      baseMatch.category = new RegExp(category, 'i');
+    }
 
-    const matchStage = category 
-      ? { ...dateFilter, 'requiredSkills.category': category }
-      : dateFilter;
-
-    const topSkills = await JobPosting.aggregate([
-      { $match: matchStage },
-      { $unwind: '$requiredSkills' },
+    // 2. Get total job counts per category (for percentage calculation)
+    const jobCounts = await JobPosting.aggregate([
+      { $match: baseMatch },
       {
         $group: {
-          _id: '$requiredSkills.name',
-          count: { $sum: 1 },
-          category: { $first: '$requiredSkills.category' },
-          importance: {
-            $push: '$requiredSkills.importance'
+          _id: '$category',
+          totalJobs: { $sum: 1 }
+        }
+      }
+    ]);
+
+    // Create a quick lookup map for job counts
+    const jobCountMap = new Map(jobCounts.map(item => [item._id, item.totalJobs]));
+    const totalJobsOverall = jobCounts.reduce((sum, item) => sum + item.totalJobs, 0);
+
+    // 3. Main Aggregation for Skills
+    let skillsAggregation = [
+      { $match: baseMatch },
+      // Unwind the skills array
+      { $unwind: '$requiredSkills' },
+
+      // ❗️ SMART FILTER: Remove soft skills from this analysis
+      { $match: { 'requiredSkills.category': { $ne: 'softSkills' } } },
+
+      // Group by category AND skill name
+      {
+        $group: {
+          _id: {
+            category: '$category',
+            skillName: '$requiredSkills.name'
           },
+          count: { $sum: 1 },
+          skillCategory: { $first: '$requiredSkills.category' },
           avgSalary: {
             $avg: {
               $cond: [
@@ -450,49 +488,90 @@ export const getTopSkills = async (req, res) => {
           }
         }
       },
-      { 
-        $match: { 
-          count: { $gte: parseInt(minDemand) } 
-        } 
-      },
-      { 
-        $addFields: {
-          requiredCount: {
-            $size: {
-              $filter: {
-                input: '$importance',
-                as: 'imp',
-                cond: { $eq: ['$$imp', 'required'] }
-              }
+
+      // Filter by minimum demand
+      { $match: { count: { $gte: minDemandNum } } },
+
+      // Sort by count to get top skills
+      { $sort: { 'count': -1 } },
+
+      // Group again by just the category to nest the skills
+      {
+        $group: {
+          _id: '$_id.category',
+          skills: {
+            $push: {
+              name: '$_id.skillName',
+              category: '$skillCategory',
+              count: '$count',
+              avgSalary: '$avgSalary'
             }
           }
         }
       },
-      { $sort: { count: -1 } },
-      { $limit: parseInt(limit) }
-    ]);
 
-    // Calculate total jobs for demand percentage
-    const totalJobs = await JobPosting.countDocuments(dateFilter);
+      // Project to slice the skills array (get top N)
+      {
+        $project: {
+          _id: 0,
+          category: '$_id',
+          topSkills: { $slice: ['$skills', limitNum] },
+          // Get the count of the #1 skill for sorting categories
+          topSkillCount: { $max: '$skills.count' }
+        }
+      },
 
-    const skillsWithDemand = topSkills.map(skill => ({
-      name: skill._id,
-      category: skill.category,
-      jobCount: skill.count,
-      demandPercentage: totalJobs > 0 ? (skill.count / totalJobs) * 100 : 0,
-      requiredCount: skill.requiredCount,
-      avgSalary: skill.avgSalary
-    }));
+      // Sort the categories themselves by the popularity of their #1 skill
+      { $sort: { 'topSkillCount': -1 } }
+    ];
 
-    res.status(200).json({
-      success: true,
-      data: skillsWithDemand,
-      metadata: {
-        totalJobs,
-        timePeriod: `${daysBack} days`,
-        minDemand: parseInt(minDemand)
-      }
+    const topSkillsPerCategory = await JobPosting.aggregate(skillsAggregation);
+
+    // 4. Merge job counts to calculate category-specific demand percentage
+    const finalResults = topSkillsPerCategory.map(categoryData => {
+      const totalJobsInCategory = jobCountMap.get(categoryData.category) || 1;
+
+      const skillsWithDemand = categoryData.topSkills.map(skill => ({
+        ...skill,
+        // Calculate demand percentage *within* this category
+        demandPercentage: parseFloat(((skill.count / totalJobsInCategory) * 100).toFixed(2))
+      }));
+
+      return {
+        category: categoryData.category,
+        totalJobsInCategory: totalJobsInCategory,
+        topSkills: skillsWithDemand
+      };
     });
+
+    const responseData = {
+      success: true,
+      data: finalResults,
+      metadata: {
+        timePeriod: `${daysNum} days`,
+        limitPerCategory: limitNum,
+        totalJobsAnalyzed: totalJobsOverall
+      }
+    };
+
+    // Cache the result for future requests
+    skillsCache.set(cacheKey, {
+      data: responseData,
+      timestamp: Date.now()
+    });
+
+    // Clean up old cache entries periodically
+    if (skillsCache.size > 50) {
+      const cutoff = Date.now() - CACHE_TTL;
+      for (const [key, value] of skillsCache.entries()) {
+        if (value.timestamp < cutoff) {
+          skillsCache.delete(key);
+        }
+      }
+    }
+
+    res.status(200).json(responseData);
+
   } catch (error) {
     console.error('Get top skills error:', error);
     res.status(500).json({

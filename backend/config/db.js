@@ -22,6 +22,33 @@ export const connectDB = async () => {
     });
 
     console.log(`✅ MongoDB Connected: ${conn.connection.host}`);
+
+    // Create performance indexes for analytics queries
+    try {
+      const db = conn.connection.db;
+
+      // Index for job postings analytics (postedDate + category)
+      await db.collection('jobpostings').createIndex(
+        { postedDate: -1, category: 1 },
+        { name: 'analytics_jobs_date_category' }
+      );
+
+      // Index for skills analytics (requiredSkills.category)
+      await db.collection('jobpostings').createIndex(
+        { 'requiredSkills.category': 1 },
+        { name: 'analytics_skills_category' }
+      );
+
+      // Compound index for curriculum analysis queries
+      await db.collection('jobpostings').createIndex(
+        { postedDate: -1, category: 1, 'requiredSkills.category': 1 },
+        { name: 'analytics_curriculum_analysis' }
+      );
+
+      console.log('✅ Database indexes created for analytics performance');
+    } catch (indexError) {
+      console.warn('⚠️  Could not create some database indexes:', indexError.message);
+    }
   } catch (error) {
     console.error(`❌ Error: ${error.message}`);
     process.exit(1); // Stop the app if connection fails
