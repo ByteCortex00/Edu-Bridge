@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { curriculaAPI } from '../api/curricula';
 import { BookOpen, Search, TrendingUp } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { PageLayout } from '../components/layout/PageLayout';
 
 export function Curricula() {
   const [curricula, setCurricula] = useState([]);
@@ -48,42 +49,43 @@ export function Curricula() {
     );
   }
 
+  const filterContent = (
+    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 space-y-4">
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 sm:w-5 sm:h-5" />
+        <input
+          type="text"
+          placeholder="Search curricula..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="w-full pl-9 sm:pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+        />
+      </div>
+
+      <div className="flex items-center space-x-4">
+        <label className="text-sm font-medium text-gray-700">Degree:</label>
+        <select
+          value={filterDegree}
+          onChange={(e) => setFilterDegree(e.target.value)}
+          className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+        >
+          <option value="all">All Degrees</option>
+          <option value="bachelor">Bachelor</option>
+          <option value="master">Master</option>
+          <option value="phd">PhD</option>
+          <option value="diploma">Diploma</option>
+          <option value="certificate">Certificate</option>
+        </select>
+      </div>
+    </div>
+  );
+
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Curricula</h1>
-        <p className="text-gray-600 mt-1 text-sm sm:text-base">Browse and analyze educational programs</p>
-      </div>
-
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 space-y-4">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 sm:w-5 sm:h-5" />
-          <input
-            type="text"
-            placeholder="Search curricula..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-9 sm:pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-          />
-        </div>
-
-        <div className="flex items-center space-x-4">
-          <label className="text-sm font-medium text-gray-700">Degree:</label>
-          <select
-            value={filterDegree}
-            onChange={(e) => setFilterDegree(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-          >
-            <option value="all">All Degrees</option>
-            <option value="bachelor">Bachelor</option>
-            <option value="master">Master</option>
-            <option value="phd">PhD</option>
-            <option value="diploma">Diploma</option>
-            <option value="certificate">Certificate</option>
-          </select>
-        </div>
-      </div>
-
+    <PageLayout
+      title="Curricula"
+      description="Browse and analyze educational programs"
+      headerContent={filterContent}
+    >
       {/* Updated grid for better tablet responsiveness */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
         {filteredCurricula.map((curriculum) => (
@@ -137,6 +139,6 @@ export function Curricula() {
           <p className="text-gray-600">Try adjusting your search criteria</p>
         </div>
       )}
-    </div>
+    </PageLayout>
   );
 }

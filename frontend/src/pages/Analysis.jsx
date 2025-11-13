@@ -34,7 +34,20 @@ export function Analysis() {
     try {
       const response = await analyticsAPI.getLatest(id);
       if (response.success) {
-        setAnalysis(response.data);
+        // Transform backend response to match frontend expectations
+        const backendData = response.data;
+        const transformedData = {
+          matchedSkills: backendData.metrics?.wellCoveredSkills?.length || 0,
+          gapSkills: backendData.metrics?.criticalGaps?.length || 0,
+          coverage: backendData.metrics?.overallMatchRate || 0,
+          gapAnalysis: backendData.metrics?.criticalGaps?.map(gap => ({
+            skill: gap.skillName,
+            gap: gap.demandFrequency,
+            demand: gap.demandFrequency
+          })) || [],
+          recommendations: backendData.recommendations?.map(rec => rec.description) || []
+        };
+        setAnalysis(transformedData);
       }
     } catch (err) {
       // No previous analysis, that's fine
@@ -53,7 +66,20 @@ export function Analysis() {
       });
 
       if (response.success) {
-        setAnalysis(response.data);
+        // Transform backend response to match frontend expectations
+        const backendData = response.data;
+        const transformedData = {
+          matchedSkills: backendData.metrics?.wellCoveredSkills?.length || 0,
+          gapSkills: backendData.metrics?.criticalGaps?.length || 0,
+          coverage: backendData.metrics?.overallMatchRate || 0,
+          gapAnalysis: backendData.metrics?.criticalGaps?.map(gap => ({
+            skill: gap.skillName,
+            gap: gap.demandFrequency,
+            demand: gap.demandFrequency
+          })) || [],
+          recommendations: backendData.recommendations?.map(rec => rec.description) || []
+        };
+        setAnalysis(transformedData);
       } else {
         setError(response.message || 'Analysis failed');
       }

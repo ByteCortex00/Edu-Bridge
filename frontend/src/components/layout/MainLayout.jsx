@@ -34,8 +34,8 @@ export function MainLayout() {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <nav className="bg-white shadow-sm border-b border-gray-200">
+    <div className="h-screen bg-gray-50 overflow-hidden flex flex-col">
+      <nav className="bg-white shadow-sm border-b border-gray-200 flex-shrink-0">
         <div className="px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <div className="flex items-center">
@@ -68,11 +68,11 @@ export function MainLayout() {
         </div>
       </nav>
 
-      <div className="flex">
+      <div className="flex flex-1 overflow-hidden">
         <aside
           className={`${
             sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-          } fixed lg:static lg:translate-x-0 z-30 w-64 h-[calc(100vh-4rem)] bg-white border-r border-gray-200 transition-transform duration-300 ease-in-out`}
+          } fixed lg:static lg:translate-x-0 z-30 w-64 h-full bg-white border-r border-gray-200 transition-transform duration-300 ease-in-out overflow-y-auto`}
         >
           <nav className="p-4 space-y-1">
             {navItems.map((item) => (
@@ -89,10 +89,12 @@ export function MainLayout() {
           </nav>
         </aside>
 
-        <main className={`flex-1 p-4 sm:p-6 lg:p-8 overflow-auto transition-all duration-300 ${
+        <main className={`flex-1 h-full overflow-y-auto transition-all duration-300 ${
           sidebarOpen ? 'lg:ml-0' : 'lg:ml-0'
         }`}>
-          <Outlet />
+          <div className="p-4 sm:p-6 lg:p-8">
+            <Outlet />
+          </div>
         </main>
       </div>
 

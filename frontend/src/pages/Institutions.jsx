@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useAuthStore } from '../store/authStore';
 import { institutionsAPI } from '../api/institutions';
-import { Building2, Plus, Search, Edit, Trash2 } from 'lucide-react';
+import { Building2, Plus, Search, Edit, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { PageLayout } from '../components/layout/PageLayout';
 
 export function Institutions() {
   const { user } = useAuthStore();
@@ -10,6 +11,8 @@ export function Institutions() {
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingInstitution, setEditingInstitution] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const institutionsPerPage = 9;
 
   useEffect(() => {
     loadInstitutions();
@@ -49,6 +52,18 @@ export function Institutions() {
     inst.location?.country.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  // Pagination logic
+  const totalPages = Math.ceil(filteredInstitutions.length / institutionsPerPage);
+  const startIndex = (currentPage - 1) * institutionsPerPage;
+  const endIndex = startIndex + institutionsPerPage;
+  const currentInstitutions = filteredInstitutions.slice(startIndex, endIndex);
+
+  const handlePageChange = (page) => {
+    setCurrentPage(page);
+    // Scroll to top of institutions section
+    window.scrollTo({ top: 200, behavior: 'smooth' });
+  };
+
   const canEdit = user?.role === 'admin';
 
   if (loading) {
@@ -59,42 +74,51 @@ export function Institutions() {
     );
   }
 
+  const headerActions = canEdit ? (
+    <button
+      onClick={() => {
+        setEditingInstitution(null);
+        setShowModal(true);
+      }}
+      className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+    >
+      <Plus className="w-5 h-5 mr-2" />
+      Add Institution
+    </button>
+  ) : null;
+
+  const searchContent = (
+    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+        <input
+          type="text"
+          placeholder="Search institutions..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+      </div>
+    </div>
+  );
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Institutions</h1>
-          <p className="text-gray-600 mt-1">Manage educational institutions</p>
+    <PageLayout
+      title="Institutions"
+      description="Manage educational institutions"
+      headerContent={
+        <div className="flex flex-col space-y-4">
+          {headerActions && (
+            <div className="flex justify-end">
+              {headerActions}
+            </div>
+          )}
+          {searchContent}
         </div>
-        {canEdit && (
-          <button
-            onClick={() => {
-              setEditingInstitution(null);
-              setShowModal(true);
-            }}
-            className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            <Plus className="w-5 h-5 mr-2" />
-            Add Institution
-          </button>
-        )}
-      </div>
-
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-          <input
-            type="text"
-            placeholder="Search institutions..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-      </div>
-
+      }
+    >
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredInstitutions.map((institution) => (
+        {currentInstitutions.map((institution) => (
           <div
             key={institution._id}
             className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow"
@@ -144,6 +168,61 @@ export function Institutions() {
         ))}
       </div>
 
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+          <div className="text-sm text-gray-700">
+            Showing {startIndex + 1}-{Math.min(endIndex, filteredInstitutions.length)} of {filteredInstitutions.length} institutions
+          </div>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => handlePageChange(currentPage - 1)}
+              disabled={currentPage === 1}
+              className="flex items-center px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <ChevronLeft className="w-4 h-4 mr-1" />
+              Previous
+            </button>
+
+            <div className="flex items-center space-x-1">
+              {Array.from({ length: totalPages }, (_, i) => i + 1)
+                .filter(page => {
+                  // Show first page, last page, current page, and pages around current
+                  return page === 1 ||
+                         page === totalPages ||
+                         (page >= currentPage - 1 && page <= currentPage + 1);
+                })
+                .map((page, index, array) => (
+                  <div key={page} className="flex items-center">
+                    {index > 0 && array[index - 1] !== page - 1 && (
+                      <span className="px-2 text-gray-400">...</span>
+                    )}
+                    <button
+                      onClick={() => handlePageChange(page)}
+                      className={`px-3 py-2 text-sm font-medium rounded-md ${
+                        page === currentPage
+                          ? 'bg-blue-600 text-white'
+                          : 'text-gray-500 bg-white border border-gray-300 hover:bg-gray-50'
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  </div>
+                ))}
+            </div>
+
+            <button
+              onClick={() => handlePageChange(currentPage + 1)}
+              disabled={currentPage === totalPages}
+              className="flex items-center px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Next
+              <ChevronRight className="w-4 h-4 ml-1" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {filteredInstitutions.length === 0 && (
         <div className="text-center py-12">
           <Building2 className="w-16 h-16 text-gray-400 mx-auto mb-4" />
@@ -168,7 +247,7 @@ export function Institutions() {
           }}
         />
       )}
-    </div>
+    </PageLayout>
   );
 }
 
