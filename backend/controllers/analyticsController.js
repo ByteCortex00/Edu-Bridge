@@ -4,7 +4,8 @@ import Curriculum from '../models/curriculumModel.js';
 import JobPosting from '../models/jobPostingModel.js';
 import gapAnalysisService from '../services/gapAnalysis.js';
 import skillsExtractor from '../services/skillExtractor.js';
-import mlService from '../services/mlService.js'; 
+import mlService from '../services/mlService.js';
+import { mlConfig } from '../config/mlConfig.js';
 
 /**
  * @desc    Run skills gap analysis for a curriculum
@@ -177,7 +178,6 @@ export const analyzeSkillsGap = async (req, res) => {
   }
 };
 
-
 /**
  * @desc    Debug skills extraction and job sampling
  * @route   GET /api/analytics/debug-analysis/:curriculumId
@@ -319,7 +319,6 @@ export const debugAnalysisSetup = async (req, res) => {
   }
 };
 
-// ... rest of the controller functions remain the same
 /**
  * @desc    Get latest analysis for a curriculum
  * @route   GET /api/analytics/latest/:curriculumId
@@ -559,7 +558,7 @@ export const comparePrograms = async (req, res) => {
         sum + comp.metrics.overallMatchRate, 0) / validComparisons.length,
       highestMatchRate: Math.max(...validComparisons.map(c => c.metrics.overallMatchRate)),
       lowestMatchRate: Math.min(...validComparisons.map(c => c.metrics.overallMatchRate)),
-      commonCriticalGaps: this.findCommonGaps(validComparisons)
+      commonCriticalGaps: findCommonGaps(validComparisons)
     };
 
     res.status(200).json({
@@ -761,6 +760,7 @@ export const getSkillsCoverage = async (req, res) => {
     });
   }
 };
+
 /**
  * @desc    Debug: Test similarity between curriculum and sample jobs
  * @route   GET /api/analytics/debug-similarity/:curriculumId
@@ -776,7 +776,7 @@ export const debugSimilarity = async (req, res) => {
     // Get curriculum with courses
     const curriculum = await Curriculum.findById(curriculumId)
       .populate('courses')
-      .select('+embedding');
+      .select('+embedding'); // Also fetches department, degree, etc. by default
 
     if (!curriculum) {
       return res.status(404).json({
@@ -788,13 +788,16 @@ export const debugSimilarity = async (req, res) => {
     console.log(`📚 Curriculum: ${curriculum.programName}`);
 
     // Check if curriculum has embedding
-    if (!curriculum.embedding || curriculum.embedding.length === 0) {
-      console.log('⚠️  Curriculum has no embedding, generating...');
-      const curriculumText = await curriculum.getTextForEmbedding();
-      const embedding = await mlService.generateEmbedding(curriculumText);
+    if (!curriculum.embedding || curriculum.embedding.length === 0 || curriculum.embeddingVersion !== mlConfig.model.version) {
+      console.log('⚠️  Curriculum has no/old embedding, generating...');
+      
+      // Use the weighted embedding generation method
+      const weightedTexts = await curriculum.getTextForEmbedding();
+      const embedding = await mlService.generateWeightedEmbedding(weightedTexts);
       
       curriculum.embedding = embedding;
       curriculum.embeddingGenerated = new Date();
+      curriculum.embeddingVersion = mlConfig.model.version;
       await curriculum.save();
       
       console.log('✅ Curriculum embedding generated');
@@ -804,7 +807,8 @@ export const debugSimilarity = async (req, res) => {
 
     // Get sample jobs with embeddings
     const jobs = await JobPosting.find({
-      embedding: { $exists: true, $ne: null }
+      embedding: { $exists: true, $ne: null },
+      embeddingVersion: mlConfig.model.version // Only compare matching versions
     })
       .limit(parseInt(jobLimit))
       .select('+embedding title description category company postedDate');
@@ -872,10 +876,17 @@ export const debugSimilarity = async (req, res) => {
           id: curriculum._id,
           name: curriculum.programName,
           embeddingDimensions: curriculum.embedding.length,
+          embeddingVersion: curriculum.embeddingVersion,
           coursesCount: curriculum.courses?.length || 0
         },
         statistics: stats,
         jobSamples: results,
+        config: {
+          model: mlConfig.model.name,
+          dimensions: mlConfig.model.embeddingDimensions,
+          version: mlConfig.model.version,
+          similarityThresholds: mlConfig.similarity
+        },
         recommendation: stats.highest < 0.6 
           ? 'Consider lowering similarity threshold or checking if embeddings are from the same model'
           : stats.average >= 0.6

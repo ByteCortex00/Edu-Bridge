@@ -8,13 +8,19 @@
 export const mlConfig = {
   // Model settings
   model: {
-    name: 'Xenova/all-MiniLM-L6-v2',
-    embeddingDimensions: 384,
-    version: 'v1'
+    name: 'Xenova/all-mpnet-base-v2', // Higher accuracy model
+    embeddingDimensions: 768, // Correct dimensions for this model
+    version: 'weighted-v1'
+  },
+
+  // NEW: Define weights for text blocks based on signal strength
+  embeddingWeights: {
+    hardSkills: 0.7,
+    coreContext: 0.2,
+    softSkills: 0.1
   },
 
   // Similarity thresholds
-  // Based on empirical testing: average similarity ~0.26, median ~0.22
   similarity: {
     // Default threshold for gap analysis
     default: 0.35,
@@ -54,7 +60,7 @@ export const mlConfig = {
   // Embedding generation settings
   embedding: {
     // Batch size for bulk embedding generation
-    batchSize: 10,
+    batchSize: 100,
     
     // Delay between batch processing (ms)
     batchDelay: 100,

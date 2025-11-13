@@ -165,19 +165,19 @@ class GapAnalysisService {
    */
   async generateCurriculumEmbedding(curriculum) {
     try {
-      const curriculumText = await curriculum.getTextForEmbedding();
-      
-      if (!curriculumText || curriculumText.length < 20) {
-        throw new Error('Insufficient curriculum text for embedding generation');
+      const weightedTexts = await curriculum.getTextForEmbedding();
+
+      if (!weightedTexts || weightedTexts.length === 0) {
+        throw new Error('No weighted texts for embedding generation');
       }
-      
-      const embedding = await mlService.generateEmbedding(curriculumText);
-      
+
+      const embedding = await mlService.generateWeightedEmbedding(weightedTexts);
+
       // Save embedding to curriculum
       await Curriculum.findByIdAndUpdate(curriculum._id, {
         embedding,
         embeddingGenerated: new Date(),
-        embeddingVersion: 'v1',
+        embeddingVersion: 'weighted-v1',
         embeddingError: null
       });
       

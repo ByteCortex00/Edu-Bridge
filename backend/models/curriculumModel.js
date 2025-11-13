@@ -1,5 +1,6 @@
 // backend/models/curriculumModel.js
 import mongoose from "mongoose";
+import { mlConfig } from '../config/mlConfig.js';
 
 const curriculumSchema = new mongoose.Schema(
   {
@@ -51,7 +52,7 @@ const curriculumSchema = new mongoose.Schema(
     },
     embeddingVersion: {
       type: String,
-      default: 'v1',
+      default: mlConfig.model.version, // Use version from config
     },
     embeddingGenerated: {
       type: Date,
@@ -68,89 +69,53 @@ const curriculumSchema = new mongoose.Schema(
 // Index for efficient embedding queries
 curriculumSchema.index({ embeddingGenerated: 1 });
 curriculumSchema.index({ embeddingVersion: 1 });
+curriculumSchema.index({ institutionId: 1 });
 
 // Virtual to check if curriculum has valid embedding
 curriculumSchema.virtual('hasEmbedding').get(function() {
-  return this.embedding && Array.isArray(this.embedding) && this.embedding.length > 0;
+  return this.embedding && 
+         Array.isArray(this.embedding) && 
+         this.embedding.length === mlConfig.model.embeddingDimensions;
 });
 
-// Enhanced method to get curriculum text representation for embedding
+// Enhanced method to get curriculum text representation for weighted embedding
 curriculumSchema.methods.getTextForEmbedding = async function() {
   // Populate courses if not already populated
   if (!this.populated('courses')) {
     await this.populate('courses');
   }
-  
-  // Build comprehensive text representation with MORE context
-  let text = '';
-  
-  // 1. Program identity with context
-  text += `${this.programName} ${this.degree} program in ${this.department}. `;
-  
-  // 2. Program description (if available)
-  if (this.description) {
-    text += `Program overview: ${this.description} `;
-  }
-  
-  // 3. Target industries with context
-  if (this.targetIndustries && this.targetIndustries.length > 0) {
-    text += `This program prepares students for careers in ${this.targetIndustries.join(', ')}. `;
-  }
-  
-  // 4. Course information with MORE detail
+
+  const weightedTexts = [];
+  const weights = mlConfig.embeddingWeights;
+
+  // HIGH SIGNAL (0.7): Hard skills, technical content, course names
+  let highSignalText = '';
+
   if (this.courses && this.courses.length > 0) {
-    text += 'Core curriculum includes: ';
-    
-    this.courses.forEach((course, index) => {
-      // Include course name
-      text += `${course.courseName}`;
-      
-      // Include course description if available
-      if (course.description) {
-        text += ` (${course.description})`;
-      }
-      
-      // Add separator
-      if (index < this.courses.length - 1) {
-        text += ', ';
-      } else {
-        text += '. ';
-      }
-    });
-    
-    // 5. Skills summary with MORE context
-    const allSkills = [];
-    const skillsByCategory = {};
-    
+    // Technical course names
+    const courseNames = this.courses.map(course => course.courseName).join(', ');
+    highSignalText += `Technical courses: ${courseNames}. `;
+
+    // Hard skills (technical skills)
+    const hardSkills = [];
     this.courses.forEach(course => {
       if (course.skills && Array.isArray(course.skills)) {
         course.skills.forEach(skill => {
-          allSkills.push(skill.name);
-          
-          // Group by category
-          if (!skillsByCategory[skill.category]) {
-            skillsByCategory[skill.category] = [];
+          // Consider skills with technical categories as hard skills
+          const technicalCategories = ['programming', 'database', 'cloud', 'devops', 'security', 'data science', 'ai/ml', 'engineering', 'technical', 'software', 'development'];
+          if (technicalCategories.some(cat => skill.category?.toLowerCase().includes(cat))) {
+            hardSkills.push(skill.name);
           }
-          skillsByCategory[skill.category].push(skill.name);
         });
       }
     });
-    
-    // Remove duplicates
-    const uniqueSkills = [...new Set(allSkills)];
-    
-    if (uniqueSkills.length > 0) {
-      text += `Students will gain expertise in ${uniqueSkills.length} key skills including: `;
-      text += `${uniqueSkills.slice(0, 30).join(', ')}. `; // Limit to first 30 skills
-      
-      // Add category-based context
-      const categories = Object.keys(skillsByCategory);
-      if (categories.length > 0) {
-        text += `Skills are focused on ${categories.join(', ')} domains. `;
-      }
+
+    const uniqueHardSkills = [...new Set(hardSkills)];
+    if (uniqueHardSkills.length > 0) {
+      highSignalText += `Technical skills: ${uniqueHardSkills.slice(0, 20).join(', ')}. `;
     }
-    
-    // 6. Add skill proficiency context
+
+    // Advanced proficiency skills
     const advancedSkills = [];
     this.courses.forEach(course => {
       if (course.skills) {
@@ -161,21 +126,71 @@ curriculumSchema.methods.getTextForEmbedding = async function() {
         });
       }
     });
-    
+
     const uniqueAdvanced = [...new Set(advancedSkills)];
     if (uniqueAdvanced.length > 0) {
-      text += `Advanced proficiency is achieved in: ${uniqueAdvanced.slice(0, 15).join(', ')}. `;
+      highSignalText += `Advanced expertise: ${uniqueAdvanced.slice(0, 15).join(', ')}. `;
     }
   }
-  
-  // 7. Add typical career outcomes/job roles context
-  // This helps match against job titles!
+
+  if (highSignalText.trim()) {
+    weightedTexts.push({ text: highSignalText.trim(), weight: weights.hardSkills });
+  }
+
+  // MEDIUM SIGNAL (0.2): Core context, program details, industries
+  let mediumSignalText = '';
+
+  // Program identity
+  mediumSignalText += `${this.programName} ${this.degree} program in ${this.department}. `;
+
+  // Target industries
+  if (this.targetIndustries && this.targetIndustries.length > 0) {
+    mediumSignalText += `Target industries: ${this.targetIndustries.join(', ')}. `;
+  }
+
+  // Career roles
   const careerRoles = this.generateCareerRoles();
   if (careerRoles) {
-    text += `Graduates typically pursue roles such as ${careerRoles}. `;
+    mediumSignalText += `Career paths: ${careerRoles}. `;
   }
-  
-  return text.trim();
+
+  if (mediumSignalText.trim()) {
+    weightedTexts.push({ text: mediumSignalText.trim(), weight: weights.coreContext });
+  }
+
+  // LOW SIGNAL (0.1): Soft skills, general descriptions
+  let lowSignalText = '';
+
+  // Program description
+  if (this.description) {
+    lowSignalText += `Program description: ${this.description}. `;
+  }
+
+  // Soft skills
+  if (this.courses && this.courses.length > 0) {
+    const softSkills = [];
+    this.courses.forEach(course => {
+      if (course.skills && Array.isArray(course.skills)) {
+        course.skills.forEach(skill => {
+          const softCategories = ['communication', 'leadership', 'teamwork', 'management', 'soft skills', 'interpersonal', 'collaboration'];
+          if (softCategories.some(cat => skill.category?.toLowerCase().includes(cat))) {
+            softSkills.push(skill.name);
+          }
+        });
+      }
+    });
+
+    const uniqueSoftSkills = [...new Set(softSkills)];
+    if (uniqueSoftSkills.length > 0) {
+      lowSignalText += `Soft skills: ${uniqueSoftSkills.slice(0, 10).join(', ')}. `;
+    }
+  }
+
+  if (lowSignalText.trim()) {
+    weightedTexts.push({ text: lowSignalText.trim(), weight: weights.softSkills });
+  }
+
+  return weightedTexts;
 };
 
 // Generic helper method to generate typical career roles based on program and department
@@ -214,6 +229,8 @@ curriculumSchema.methods.generateCareerRoles = function() {
     'information technology': 'IT Specialist, Systems Administrator, Network Engineer, IT Consultant',
     'data science': 'Data Scientist, Data Analyst, Machine Learning Engineer, Business Intelligence Analyst',
     'cybersecurity': 'Security Analyst, Security Engineer, Penetration Tester, Security Consultant',
+    'artificial intelligence': 'AI Engineer, Machine Learning Engineer, Data Scientist, AI Researcher',
+    'machine learning': 'Machine Learning Engineer, Data Scientist, AI Specialist, ML Researcher',
     
     // Sciences
     'biology': 'Biologist, Research Scientist, Lab Technician, Biology Teacher, Environmental Scientist',
@@ -263,6 +280,61 @@ curriculumSchema.methods.generateCareerRoles = function() {
   
   return degreeTitles[this.degree] || 'Professional, Specialist, Graduate';
 };
+
+// Method to validate embedding dimensions
+curriculumSchema.methods.validateEmbedding = function() {
+  if (!this.embedding) {
+    return { valid: false, reason: 'No embedding found' };
+  }
+  
+  if (!Array.isArray(this.embedding)) {
+    return { valid: false, reason: 'Embedding is not an array' };
+  }
+  
+  if (this.embedding.length !== mlConfig.model.embeddingDimensions) {
+    return { 
+      valid: false, 
+      reason: `Embedding dimensions mismatch. Expected: ${mlConfig.model.embeddingDimensions}, Got: ${this.embedding.length}` 
+    };
+  }
+  
+  return { valid: true };
+};
+
+// Static method to find curricula with valid embeddings
+curriculumSchema.statics.findWithEmbeddings = function(query = {}) {
+  return this.find({
+    ...query,
+    embedding: { $exists: true, $ne: null, $not: { $size: 0 } }
+  });
+};
+
+// Static method to find curricula needing embedding generation
+curriculumSchema.statics.findWithoutEmbeddings = function(query = {}) {
+  return this.find({
+    ...query,
+    $or: [
+      { embedding: { $exists: false } },
+      { embedding: null },
+      { embedding: { $size: 0 } },
+      { embeddingVersion: { $ne: mlConfig.model.version } }
+    ]
+  });
+};
+
+// Pre-save middleware to validate embedding if present
+curriculumSchema.pre('save', function(next) {
+  if (this.embedding && this.embedding.length > 0) {
+    const validation = this.validateEmbedding();
+    if (!validation.valid) {
+      this.embeddingError = validation.reason;
+    } else {
+      this.embeddingError = null;
+      this.embeddingGenerated = new Date();
+    }
+  }
+  next();
+});
 
 const Curriculum = mongoose.model("Curriculum", curriculumSchema);
 export default Curriculum;

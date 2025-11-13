@@ -1,10 +1,11 @@
 // backend/services/mlService.js
 import { pipeline } from '@xenova/transformers';
+import mlConfig from '../config/mlConfig.js';
 
 class MLService {
   constructor() {
     this.embedder = null;
-    this.modelName = 'Xenova/all-MiniLM-L6-v2'; // You can change to TechWolf/JobBERT-v2 later
+    this.modelName = mlConfig.model.name;
     this.isLoading = false;
     this.loadError = null;
   }
@@ -127,6 +128,70 @@ class MLService {
   }
 
   /**
+   * Generate weighted embedding from multiple text blocks
+   * @param {Array<{text: string, weight: number}>} weightedTexts - Array of text blocks with weights
+   * @returns {Promise<Float32Array>} - Weighted and normalized embedding vector
+   */
+  async generateWeightedEmbedding(weightedTexts) {
+    if (!Array.isArray(weightedTexts) || weightedTexts.length === 0) {
+      throw new Error('Weighted texts must be a non-empty array');
+    }
+
+    if (!this.isModelReady()) {
+      throw new Error('ML model not ready.');
+    }
+
+    const model = this.embedder;
+    let finalEmbedding = new Array(mlConfig.model.embeddingDimensions).fill(0);
+    let totalWeight = 0;
+
+    for (const { text, weight } of weightedTexts) {
+      if (text && typeof text === 'string' && text.trim().length > 0 && weight > 0) {
+        // Generate embedding for this specific text block
+        const result = await model(text, { pooling: 'mean', normalize: true });
+        const emb = Array.from(result.data);
+
+        // Apply weight and accumulate
+        for (let i = 0; i < emb.length; i++) {
+          finalEmbedding[i] += emb[i] * weight;
+        }
+        totalWeight += weight;
+      }
+    }
+
+    // Normalize the final vector (divide by total weight and L2 normalize)
+    if (totalWeight > 0) {
+      finalEmbedding = this.normalizeVector(finalEmbedding, totalWeight);
+    } else {
+      throw new Error('No valid weighted texts provided');
+    }
+
+    return finalEmbedding;
+  }
+
+  /**
+   * Helper to normalize the weighted vector
+   * @param {Array<number>} vector - Accumulated weighted vector
+   * @param {number} totalWeight - Sum of all weights
+   * @returns {Array<number>} - Normalized vector
+   */
+  normalizeVector(vector, totalWeight) {
+    // 1. Divide by total weight
+    const averagedVector = vector.map(v => v / totalWeight);
+
+    // 2. L2 normalization
+    let norm = 0;
+    for (const v of averagedVector) {
+      norm += v * v;
+    }
+    norm = Math.sqrt(norm);
+
+    if (norm === 0) return averagedVector;
+
+    return averagedVector.map(v => v / norm);
+  }
+
+  /**
    * Calculate cosine similarity between two embeddings
    * @param {Array<number>|Float32Array} emb1 - First embedding
    * @param {Array<number>|Float32Array} emb2 - Second embedding
@@ -221,8 +286,8 @@ class MLService {
           if (job.embedding && Array.isArray(job.embedding) && job.embedding.length > 0) {
             jobEmbedding = job.embedding;
           } else {
-            const jobText = `${job.title} ${job.description}`;
-            jobEmbedding = await this.generateEmbedding(jobText);
+            const weightedTexts = job.getTextForEmbedding();
+            jobEmbedding = await this.generateWeightedEmbedding(weightedTexts);
           }
 
           const similarity = this.calculateSimilarity(curriculumEmbedding, jobEmbedding);
