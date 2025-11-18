@@ -16,8 +16,24 @@ const userSchema = new mongoose.Schema(
     },
     password: {
       type: String,
-      required: [true, "Please provide a password"],
+      required: function() {
+        // Password is required only for non-Clerk users
+        return !this.clerkId;
+      },
       minlength: 6,
+    },
+    clerkId: {
+      type: String,
+      unique: true,
+      sparse: true, // Allows null values but ensures uniqueness when present
+    },
+    profileImage: {
+      type: String,
+      default: null,
+    },
+    isActive: {
+      type: Boolean,
+      default: true,
     },
     role: {
       type: String,

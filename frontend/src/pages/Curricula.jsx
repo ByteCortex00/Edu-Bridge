@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { curriculaAPI } from '../api/curricula';
+import { useCurriculaAPI } from '../api/curricula';
+import { useAuthStore } from '../store/authStore';
 import { BookOpen, Search, TrendingUp } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { PageLayout } from '../components/layout/PageLayout';
@@ -10,16 +11,26 @@ export function Curricula() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterDegree, setFilterDegree] = useState('all');
   const navigate = useNavigate();
+  const curriculaAPI = useCurriculaAPI();
+  const { user } = useAuthStore();
 
   useEffect(() => {
     loadCurricula();
-  }, [filterDegree]);
+  }, [filterDegree, user]); // Add user to dependency array
 
   const loadCurricula = async () => {
     try {
       const params = {};
+      
+      // Filter by Degree
       if (filterDegree !== 'all') {
         params.degree = filterDegree;
+      }
+
+      //
+      // Security Check: If user is an institution, ONLY show their curricula
+      if (user?.role === 'institution' && user?.institutionId) {
+        params.institutionId = user.institutionId;
       }
 
       const response = await curriculaAPI.getAll(params);
@@ -82,8 +93,8 @@ export function Curricula() {
 
   return (
     <PageLayout
-      title="Curricula"
-      description="Browse and analyze educational programs"
+      title={user?.role === 'institution' ? "My Curricula" : "All Curricula"}
+      description={user?.role === 'institution' ? "Manage and analyze your institution's programs" : "Browse and analyze educational programs"}
       headerContent={filterContent}
     >
       {/* Updated grid for better tablet responsiveness */}
@@ -111,6 +122,15 @@ export function Curricula() {
                 <span className="font-medium mr-2">Department:</span>
                 <span className="truncate">{curriculum.department}</span>
               </div>
+              
+              {/* Show Institution Name only if NOT an institution user (redundant otherwise) */}
+              {user?.role !== 'institution' && curriculum.institutionId && (
+                 <div className="flex text-gray-600">
+                  <span className="font-medium mr-2">Institution:</span>
+                  <span className="truncate">{curriculum.institutionId.name}</span>
+                </div>
+              )}
+
               <div className="flex text-gray-600">
                 <span className="font-medium mr-2">Duration:</span>
                 <span>{curriculum.duration} months</span>
@@ -121,8 +141,8 @@ export function Curricula() {
               {curriculum.description}
             </p>
 
-            <button 
-              onClick={() => navigate(`/analysis/${curriculum._id}`)}
+            <button
+              onClick={() => navigate(`/app/analysis/${curriculum._id}`)}
               className="w-full flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm"
             >
               <TrendingUp className="w-4 h-4 mr-2" />

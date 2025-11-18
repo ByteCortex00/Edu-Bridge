@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { analyticsAPI } from '../api/analytics';
+import { useAnalyticsAPI } from '../api/analytics';
+import { useAuthStore } from '../store/authStore';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { TrendingUp, Briefcase, Users, Target, ChevronLeft, ChevronRight } from 'lucide-react';
 import { PageLayout } from '../components/layout/PageLayout';
@@ -10,10 +11,17 @@ export function Analytics() {
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);
   const categoriesPerPage = 5;
+  const analyticsAPI = useAnalyticsAPI();
+  const { user } = useAuthStore();
 
   useEffect(() => {
     loadAnalytics();
-  }, []);
+  }, [user]); // Dependency on user to trigger filter change on login/sync
+
+  useEffect(() => {
+    // Reset to page 1 when filter changes
+    setCurrentPage(1);
+  }, [selectedCategory]);
 
   useEffect(() => {
     // Reset to page 1 when filter changes
@@ -22,10 +30,22 @@ export function Analytics() {
 
   const loadAnalytics = async () => {
     try {
-      const response = await analyticsAPI.getTopSkills({
+      const params = {
         limit: 10,
         daysBack: 90
-      });
+      };
+
+      // Filter by user's institution target industries if applicable
+      //
+      if (user?.role === 'institution' && user?.institutionId) {
+          params.institutionId = user.institutionId;
+          // When institutionId is set, the backend logic overrides the global category filter
+          setSelectedCategory('all');
+      } else if (selectedCategory !== 'all') {
+          params.category = selectedCategory;
+      }
+
+      const response = await analyticsAPI.getTopSkills(params);
 
       if (response.success) {
         setCategoryAnalytics(response.data);

@@ -12,7 +12,7 @@ import {
   getCurriculumEmbeddingStatus,
   regenerateCurriculumEmbedding
 } from '../controllers/curriculumController.js';
-import { protect, authorize } from '../middleware/auth.js';
+import { protectWithClerk, authorizeRole } from '../middleware/clerkAuth.js';
 
 const router = express.Router();
 
@@ -26,9 +26,9 @@ router.get('/:id', getCurriculum);
 router.get('/:id/skills', getCurriculumSkills);
 
 // Protected routes (Admin/Institution roles)
-router.post('/', protect, authorize('admin', 'institution'), createCurriculum);
-router.put('/:id', protect, authorize('admin', 'institution'), updateCurriculum);
-router.delete('/:id', protect, authorize('admin', 'institution'), deleteCurriculum);
-router.post('/:id/courses', protect, authorize('admin', 'institution'), addCourse);
+router.post('/', protectWithClerk, authorizeRole('admin', 'institution'), createCurriculum);
+router.put('/:id', protectWithClerk, authorizeRole('admin', 'institution'), updateCurriculum);
+router.delete('/:id', protectWithClerk, authorizeRole('admin', 'institution'), deleteCurriculum);
+router.post('/:id/courses', protectWithClerk, authorizeRole('admin', 'institution'), addCourse);
 
 export default router;

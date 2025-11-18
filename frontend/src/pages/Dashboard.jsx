@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
-import { institutionsAPI } from '../api/institutions';
-import { curriculaAPI } from '../api/curricula';
-import { jobsAPI } from '../api/jobs';
-import { analyticsAPI } from '../api/analytics';
+import { useInstitutionsAPI } from '../api/institutions';
+import { useCurriculaAPI } from '../api/curricula';
+import { useJobsAPI } from '../api/jobs';
+import { useAnalyticsAPI } from '../api/analytics';
 import { BookOpen, Briefcase, TrendingUp, Building2, ArrowRight } from 'lucide-react';
+import { InstitutionDashboard } from './InstitutionDashboard';
 
 export function Dashboard() {
   const { user } = useAuthStore();
@@ -16,6 +17,10 @@ export function Dashboard() {
     totalAnalyses: 0,
   });
   const [loading, setLoading] = useState(true);
+  const institutionsAPI = useInstitutionsAPI();
+  const curriculaAPI = useCurriculaAPI();
+  const jobsAPI = useJobsAPI();
+  const analyticsAPI = useAnalyticsAPI();
 
   useEffect(() => {
     loadStats();
@@ -48,30 +53,34 @@ export function Dashboard() {
       value: stats.totalInstitutions,
       icon: Building2,
       color: 'bg-blue-500',
-      link: '/institutions',
+      link: '/app/institutions',
     },
     {
       title: 'Curricula',
       value: stats.totalCurricula,
       icon: BookOpen,
       color: 'bg-green-500',
-      link: '/curricula',
+      link: '/app/curricula',
     },
     {
       title: 'Job Postings',
       value: stats.totalJobs,
       icon: Briefcase,
       color: 'bg-amber-500',
-      link: '/jobs',
+      link: '/app/jobs',
     },
     {
       title: 'Analyses Run',
       value: stats.totalAnalyses,
       icon: TrendingUp,
       color: 'bg-purple-500',
-      link: '/analytics',
+      link: '/app/analytics',
     },
   ];
+
+  if (user?.role === 'institution') {
+    return <InstitutionDashboard />;
+  }
 
   if (loading) {
     return (
@@ -120,7 +129,7 @@ export function Dashboard() {
           Analyze curriculum-market alignment and identify critical skills gaps
         </p>
         <Link
-          to="/curricula"
+          to="/app/curricula"
           className="inline-flex items-center px-6 py-3 bg-white text-blue-600 rounded-lg font-semibold hover:bg-blue-50 transition-colors"
         >
           Get Started

@@ -408,7 +408,7 @@ export const getGapTrends = async (req, res) => {
 };
 
 /**
- * @desc    Get top in-demand skills, grouped by job category
+ * @desc    Get top in-demand skills, grouped by job category (or filtered by institution's targets)
  * @route   GET /api/analytics/top-skills
  * @access  Public
  */
@@ -418,15 +418,16 @@ export const getTopSkills = async (req, res) => {
       category = 'all', // 'all' or a specific category
       limit = 10,     // Skills per category
       daysBack = 90,
-      minDemand = 0     // Minimum skill count
+      minDemand = 0,    // Minimum skill count
+      institutionId     // <--- NEW PARAMETER
     } = req.query;
 
     const limitNum = parseInt(limit);
     const daysNum = parseInt(daysBack);
     const minDemandNum = parseInt(minDemand);
 
-    // Check cache for popular queries
-    const cacheKey = `topSkills_${category}_${daysNum}_${limitNum}_${minDemandNum}`;
+    // Check cache for popular queries - include institutionId in cache key
+    const cacheKey = `topSkills_${category}_${daysNum}_${limitNum}_${minDemandNum}_${institutionId || 'global'}`;
     const cached = skillsCache.get(cacheKey);
 
     if (cached && (Date.now() - cached.timestamp) < CACHE_TTL) {
@@ -434,15 +435,43 @@ export const getTopSkills = async (req, res) => {
       return res.status(200).json(cached.data);
     }
 
-    // 1. Base Match Stage (Date and optional Category)
+    // 1. Base Match Stage (Date and optional Category/Institution)
     const baseMatch = {
       postedDate: {
         $gte: new Date(Date.now() - daysNum * 24 * 60 * 60 * 1000)
       }
     };
-    if (category && category !== 'all') {
+
+    // Filter by general category if provided and no institution filter is overriding it
+    if (category && category !== 'all' && !institutionId) {
       baseMatch.category = new RegExp(category, 'i');
     }
+
+    // NEW LOGIC: Filter by institution's target industries
+    let targetIndustries = [];
+    if (institutionId) {
+        // Find all unique target industries for this institution's curricula
+        const curricula = await Curriculum.find({ institutionId }).select('targetIndustries');
+        targetIndustries = [...new Set(curricula.flatMap(c => c.targetIndustries).filter(Boolean))];
+
+        if (targetIndustries.length > 0) {
+            // Use $or condition to match jobs against any of the target industries, overriding any general category filter
+            baseMatch.$or = targetIndustries.map(industry => ({ category: new RegExp(industry, 'i') }));
+        } else {
+            // If no target industries, return empty data
+             return res.status(200).json({
+                success: true,
+                data: [],
+                metadata: {
+                    timePeriod: `${daysNum} days`,
+                    limitPerCategory: limitNum,
+                    totalJobsAnalyzed: 0,
+                    message: 'No target industries found for this institution to filter the job market.'
+                }
+            });
+        }
+    }
+    // END NEW LOGIC
 
     // 2. Get total job counts per category (for percentage calculation)
     const jobCounts = await JobPosting.aggregate([
@@ -550,7 +579,9 @@ export const getTopSkills = async (req, res) => {
       metadata: {
         timePeriod: `${daysNum} days`,
         limitPerCategory: limitNum,
-        totalJobsAnalyzed: totalJobsOverall
+        totalJobsAnalyzed: totalJobsOverall,
+        // Include target industries in response metadata
+        ...(institutionId && { targetIndustries: targetIndustries.join(', ') })
       }
     };
 
@@ -694,11 +725,21 @@ export const getDashboardOverview = async (req, res) => {
 
     // Get all curricula for institution
     const curricula = await Curriculum.find({ institutionId });
-    
+
     if (curricula.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: 'No curricula found for this institution'
+      return res.status(200).json({ // Changed to 200 to avoid frontend errors on empty state
+        success: true,
+        data: {
+          institutionMetrics: {
+            totalPrograms: 0,
+            analyzedPrograms: 0,
+            avgMatchRate: 0,
+            totalCriticalGaps: 0,
+            recentJobPostings: 0
+          },
+          topSkills: [],
+          programAnalyses: []
+        }
       });
     }
 
@@ -709,32 +750,32 @@ export const getDashboardOverview = async (req, res) => {
       curriculumId: { $in: curriculumIds }
     })
       .sort({ analysisDate: -1 })
-      .limit(curricula.length)
+      .limit(curricula.length) // Limit to 1 per program roughly (simplification)
       .populate('curriculumId', 'programName');
 
     // Calculate aggregate metrics
-    const avgMatchRate = analyses.length > 0 
-      ? analyses.reduce((sum, a) => sum + a.metrics.overallMatchRate, 0) / analyses.length 
+    const avgMatchRate = analyses.length > 0
+      ? analyses.reduce((sum, a) => sum + a.metrics.overallMatchRate, 0) / analyses.length
       : 0;
 
-    const totalCriticalGaps = analyses.reduce((sum, a) => 
+    const totalCriticalGaps = analyses.reduce((sum, a) =>
       sum + a.metrics.criticalGaps.length, 0);
 
-    // Get recent job market data
+    // Get recent job market data (Global context for comparison)
     const recentJobs = await JobPosting.countDocuments({
       postedDate: {
         $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) // Last 30 days
       }
     });
 
-    // Get top skills in demand
+    // Get top skills in demand (Global)
     const topSkills = await JobPosting.aggregate([
-      { 
-        $match: { 
+      {
+        $match: {
           postedDate: {
             $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
           }
-        } 
+        }
       },
       { $unwind: '$requiredSkills' },
       {
@@ -747,6 +788,14 @@ export const getDashboardOverview = async (req, res) => {
       { $sort: { count: -1 } },
       { $limit: 5 }
     ]);
+
+    // Create a map of latest analysis by curriculum ID for easy lookup
+    const analysisMap = new Map();
+    analyses.forEach(a => {
+      if (a.curriculumId) {
+        analysisMap.set(a.curriculumId._id.toString(), a);
+      }
+    });
 
     res.status(200).json({
       success: true,
@@ -763,12 +812,20 @@ export const getDashboardOverview = async (req, res) => {
           category: skill.category,
           demand: skill.count
         })),
-        programAnalyses: analyses.map(analysis => ({
-          programName: analysis.curriculumId.programName,
-          matchRate: analysis.metrics.overallMatchRate,
-          criticalGaps: analysis.metrics.criticalGaps.length,
-          lastAnalyzed: analysis.analysisDate
-        }))
+        // Map over ALL curricula to ensure we return the full list, even if not analyzed
+        programAnalyses: curricula.map(curr => {
+          const analysis = analysisMap.get(curr._id.toString());
+          return {
+            curriculumId: curr._id,
+            programName: curr.programName,
+            degree: curr.degree,
+            department: curr.department,
+            isAnalyzed: !!analysis,
+            matchRate: analysis ? analysis.metrics.overallMatchRate : null,
+            criticalGaps: analysis ? analysis.metrics.criticalGaps.length : null,
+            lastAnalyzed: analysis ? analysis.analysisDate : null
+          };
+        })
       }
     });
   } catch (error) {

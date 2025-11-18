@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { analyticsAPI } from '../api/analytics';
-import { curriculaAPI } from '../api/curricula';
+import { useAnalyticsAPI } from '../api/analytics';
+import { useCurriculaAPI } from '../api/curricula';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { TrendingUp, BookOpen, AlertCircle } from 'lucide-react';
 
@@ -12,6 +12,8 @@ export function Analysis() {
   const [loading, setLoading] = useState(true);
   const [analyzing, setAnalyzing] = useState(false);
   const [error, setError] = useState('');
+  const analyticsAPI = useAnalyticsAPI();
+  const curriculaAPI = useCurriculaAPI();
 
   useEffect(() => {
     loadCurriculum();

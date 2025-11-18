@@ -7,10 +7,10 @@ import {
   getTopSkills,
   comparePrograms,
   getDashboardOverview,
-  debugAnalysisSetup,  
+  debugAnalysisSetup,
   debugSimilarity
 } from '../controllers/analyticsController.js';
-import { protect } from '../middleware/auth.js';
+import { protectWithClerk } from '../middleware/clerkAuth.js';
 
 const router = express.Router();
 
@@ -32,14 +32,14 @@ router.get('/', (req, res) => {
 });
 
 router.get('/top-skills', getTopSkills);
-router.get('/debug-similarity/:curriculumId', protect, debugSimilarity)
+router.get('/debug-similarity/:curriculumId', protectWithClerk, debugSimilarity)
 // Protected routes
-router.post('/analyze/:curriculumId', protect, analyzeSkillsGap);
+router.post('/analyze/:curriculumId', protectWithClerk, analyzeSkillsGap);
 router.get('/latest/:curriculumId', getLatestAnalysis);
-router.get('/trends/:curriculumId', protect, getGapTrends);
-router.post('/compare', protect, comparePrograms);
-router.get('/dashboard/:institutionId', protect, getDashboardOverview);
-router.get('/debug-analysis/:curriculumId', protect, debugAnalysisSetup);
+router.get('/trends/:curriculumId', protectWithClerk, getGapTrends);
+router.post('/compare', protectWithClerk, comparePrograms);
+router.get('/dashboard/:institutionId', protectWithClerk, getDashboardOverview);
+router.get('/debug-analysis/:curriculumId', protectWithClerk, debugAnalysisSetup);
 
 
 export default router;

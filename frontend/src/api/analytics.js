@@ -1,33 +1,37 @@
-import { apiClient } from './client';
+import { useAPI } from './client';
 
-export const analyticsAPI = {
-  analyzeGap: async (curriculumId, options) => {
-    const response = await apiClient.post(`/analytics/analyze/${curriculumId}`, options);
-    return response;
-  },
+export const useAnalyticsAPI = () => {
+  const apiClient = useAPI();
 
-  getLatest: async (curriculumId) => {
-    const response = await apiClient.get(`/analytics/latest/${curriculumId}`);
-    return response;
-  },
+  return {
+    analyzeGap: async (curriculumId, options) => {
+      const response = await apiClient.post(`/analytics/analyze/${curriculumId}`, options);
+      return response;
+    },
 
-  getTrends: async (curriculumId) => {
-    const response = await apiClient.get(`/analytics/trends/${curriculumId}`);
-    return response;
-  },
+    getLatest: async (curriculumId) => {
+      const response = await apiClient.get(`/analytics/latest/${curriculumId}`);
+      return response;
+    },
 
-  getTopSkills: async (params) => {
-    const response = await apiClient.get('/analytics/top-skills', { params });
-    return response;
-  },
+    getTrends: async (curriculumId) => {
+      const response = await apiClient.get(`/analytics/trends/${curriculumId}`);
+      return response;
+    },
 
-  comparePrograms: async (curriculumIds) => {
-    const response = await apiClient.post('/analytics/compare', { curriculumIds });
-    return response;
-  },
+    getTopSkills: async (params) => {
+      const response = await apiClient.get('/analytics/top-skills', { params });
+      return response;
+    },
 
-  getDashboard: async (institutionId) => {
-    const response = await apiClient.get(`/analytics/dashboard/${institutionId}`);
-    return response;
-  }
+    comparePrograms: async (curriculumIds) => {
+      const response = await apiClient.post('/analytics/compare', { curriculumIds });
+      return response;
+    },
+
+    getDashboard: async (institutionId) => {
+      const response = await apiClient.get(`/analytics/dashboard/${institutionId}`);
+      return response;
+    }
+  };
 };

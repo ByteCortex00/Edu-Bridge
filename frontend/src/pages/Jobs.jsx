@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { jobsAPI } from '../api/jobs';
+import { useJobsAPI } from '../api/jobs';
 import { Briefcase, Search, MapPin, DollarSign, Calendar } from 'lucide-react';
 import { format } from 'date-fns';
 import { PageLayout } from '../components/layout/PageLayout';
@@ -15,6 +15,7 @@ export function Jobs() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const pageSize = 12;
+  const jobsAPI = useJobsAPI();
 
   useEffect(() => {
     loadJobs();

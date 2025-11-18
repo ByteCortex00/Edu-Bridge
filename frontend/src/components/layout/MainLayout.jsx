@@ -1,5 +1,7 @@
-import { useState } from 'react';
-import { Outlet, Link, useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
+import { useUser, UserButton } from '@clerk/clerk-react';
+import { useClerkSync } from '../../hooks/useClerkSync';
 import { useAuthStore } from '../../store/authStore';
 import {
   Menu,
@@ -10,27 +12,45 @@ import {
   Briefcase,
   TrendingUp,
   Settings,
-  LogOut,
 } from 'lucide-react';
 
 export function MainLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const { user, clearAuth } = useAuthStore();
+  const { user: clerkUser } = useUser();
+  const { user: dbUser } = useAuthStore();
   const navigate = useNavigate();
+  const location = useLocation();
 
-  const handleLogout = () => {
-    console.log('🚪 Frontend: Logout initiated, clearing auth and navigating to /login');
-    clearAuth();
-    navigate('/login');
-  };
+  // Sync Clerk user with backend
+  useClerkSync();
+
+  // Redirect to onboarding if no role/institution is set
+  useEffect(() => {
+    console.log('🔍 MainLayout checking user state:', {
+      dbUser: dbUser ? { role: dbUser.role, institutionId: dbUser.institutionId } : null,
+      pathname: location.pathname
+    });
+
+    // Only run this check if we have the DB user loaded
+    if (dbUser && !dbUser.role && !location.pathname.includes('/onboarding')) {
+      console.log('⚠️ No role found, redirecting to onboarding');
+      navigate('/app/onboarding');
+    }
+
+    // Optional: Force institution users who haven't selected an institution yet
+    if (dbUser?.role === 'institution' && !dbUser?.institutionId && !location.pathname.includes('/onboarding')) {
+      console.log('⚠️ Institution user without institutionId, redirecting to onboarding');
+      navigate('/app/onboarding');
+    }
+  }, [dbUser, navigate, location]);
 
   const navItems = [
-    { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-    { to: '/institutions', icon: Building2, label: 'Institutions' },
-    { to: '/curricula', icon: BookOpen, label: 'Curricula' },
-    { to: '/jobs', icon: Briefcase, label: 'Jobs' },
-    { to: '/analytics', icon: TrendingUp, label: 'Analytics' },
-    { to: '/settings', icon: Settings, label: 'Settings' },
+    { to: '/app/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+    { to: '/app/institutions', icon: Building2, label: 'Institutions' },
+    { to: '/app/curricula', icon: BookOpen, label: 'Curricula' },
+    { to: '/app/jobs', icon: Briefcase, label: 'Jobs' },
+    { to: '/app/analytics', icon: TrendingUp, label: 'Analytics' },
+    { to: '/app/settings', icon: Settings, label: 'Settings' },
   ];
 
   return (
@@ -52,17 +72,17 @@ export function MainLayout() {
             </div>
 
             <div className="flex items-center space-x-4">
-              <div className="text-sm hidden sm:block">
-                <div className="font-medium text-gray-900">{user?.name}</div>
-                <div className="text-gray-500 capitalize">{user?.role}</div>
-              </div>
-              <button
-                onClick={handleLogout}
-                className="p-2 rounded-md text-gray-600 hover:text-red-600 hover:bg-red-50"
-                title="Logout"
-              >
-                <LogOut className="w-4 h-4 sm:w-5 sm:h-5" />
-              </button>
+              <UserButton
+                appearance={{
+                  elements: {
+                    avatarBox: 'w-8 h-8 sm:w-10 sm:h-10',
+                    userButtonPopoverCard: 'shadow-lg border-0',
+                    userButtonTrigger: 'focus:shadow-none',
+                  }
+                }}
+                showName={true}
+                userProfileMode="modal"
+              />
             </div>
           </div>
         </div>

@@ -1,33 +1,37 @@
-import { apiClient } from './client';
+import { useAPI } from './client';
 
-export const jobsAPI = {
-  getAll: async (params) => {
-    const response = await apiClient.get('/jobs', { params });
-    return response;
-  },
+export const useJobsAPI = () => {
+  const apiClient = useAPI();
 
-  getById: async (id) => {
-    const response = await apiClient.get(`/jobs/${id}`);
-    return response;
-  },
+  return {
+    getAll: async (params) => {
+      const response = await apiClient.get('/jobs', { params });
+      return response;
+    },
 
-  getStats: async () => {
-    const response = await apiClient.get('/jobs/stats');
-    return response;
-  },
+    getById: async (id) => {
+      const response = await apiClient.get(`/jobs/${id}`);
+      return response;
+    },
 
-  getCategories: async () => {
-    const response = await apiClient.get('/jobs/categories');
-    return response;
-  },
+    getStats: async () => {
+      const response = await apiClient.get('/jobs/stats');
+      return response;
+    },
 
-  fetchFromAdzuna: async (params) => {
-    const response = await apiClient.get('/jobs/fetch', { params });
-    return response;
-  },
+    getCategories: async () => {
+      const response = await apiClient.get('/jobs/categories');
+      return response;
+    },
 
-  bulkPopulate: async (config) => {
-    const response = await apiClient.post('/jobs/bulk-populate', config);
-    return response;
-  }
+    fetchFromAdzuna: async (params) => {
+      const response = await apiClient.get('/jobs/fetch', { params });
+      return response;
+    },
+
+    bulkPopulate: async (config) => {
+      const response = await apiClient.post('/jobs/bulk-populate', config);
+      return response;
+    }
+  };
 };

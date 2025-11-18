@@ -1,38 +1,42 @@
-import { apiClient } from './client';
+import { useAPI } from './client';
 
-export const curriculaAPI = {
-  getAll: async (params) => {
-    const response = await apiClient.get('/curricula', { params });
-    return response;
-  },
+export const useCurriculaAPI = () => {
+  const apiClient = useAPI();
 
-  getById: async (id) => {
-    const response = await apiClient.get(`/curricula/${id}`);
-    return response;
-  },
+  return {
+    getAll: async (params) => {
+      const response = await apiClient.get('/curricula', { params });
+      return response;
+    },
 
-  create: async (data) => {
-    const response = await apiClient.post('/curricula', data);
-    return response;
-  },
+    getById: async (id) => {
+      const response = await apiClient.get(`/curricula/${id}`);
+      return response;
+    },
 
-  update: async (id, data) => {
-    const response = await apiClient.put(`/curricula/${id}`, data);
-    return response;
-  },
+    create: async (data) => {
+      const response = await apiClient.post('/curricula', data);
+      return response;
+    },
 
-  delete: async (id) => {
-    const response = await apiClient.delete(`/curricula/${id}`);
-    return response;
-  },
+    update: async (id, data) => {
+      const response = await apiClient.put(`/curricula/${id}`, data);
+      return response;
+    },
 
-  getSkills: async (id) => {
-    const response = await apiClient.get(`/curricula/${id}/skills`);
-    return response;
-  },
+    delete: async (id) => {
+      const response = await apiClient.delete(`/curricula/${id}`);
+      return response;
+    },
 
-  addCourse: async (id, courseData) => {
-    const response = await apiClient.post(`/curricula/${id}/courses`, courseData);
-    return response;
-  }
+    getSkills: async (id) => {
+      const response = await apiClient.get(`/curricula/${id}/skills`);
+      return response;
+    },
+
+    addCourse: async (id, courseData) => {
+      const response = await apiClient.post(`/curricula/${id}/courses`, courseData);
+      return response;
+    }
+  };
 };

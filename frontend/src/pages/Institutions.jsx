@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useAuthStore } from '../store/authStore';
-import { institutionsAPI } from '../api/institutions';
+import { useInstitutionsAPI } from '../api/institutions';
 import { Building2, Plus, Search, Edit, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { PageLayout } from '../components/layout/PageLayout';
 
@@ -13,6 +13,7 @@ export function Institutions() {
   const [editingInstitution, setEditingInstitution] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const institutionsPerPage = 9;
+  const institutionsAPI = useInstitutionsAPI();
 
   useEffect(() => {
     loadInstitutions();
@@ -235,6 +236,7 @@ export function Institutions() {
 
       {showModal && (
         <InstitutionModal
+          institutionsAPI={institutionsAPI}
           institution={editingInstitution}
           onClose={() => {
             setShowModal(false);
@@ -251,7 +253,7 @@ export function Institutions() {
   );
 }
 
-function InstitutionModal({ institution, onClose, onSuccess }) {
+function InstitutionModal({ institutionsAPI, institution, onClose, onSuccess }) {
   const [formData, setFormData] = useState({
     name: institution?.name || '',
     type: institution?.type || 'university',

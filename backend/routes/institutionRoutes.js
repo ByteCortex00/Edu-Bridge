@@ -8,7 +8,7 @@ import {
   deleteInstitution,
   getInstitutionStats
 } from '../controllers/institutionController.js';
-import { protect, authorize } from '../middleware/auth.js';
+import { protectWithClerk, authorizeRole } from '../middleware/clerkAuth.js';
 
 const router = express.Router();
 
@@ -18,8 +18,8 @@ router.get('/:id', getInstitution);
 router.get('/:id/stats', getInstitutionStats); // requires debugging
 
 // Protected routes (Admin/Institution roles)
-router.post('/', protect, authorize('admin', 'institution'), createInstitution);
-router.put('/:id', protect, authorize('admin', 'institution'), updateInstitution);
-router.delete('/:id', protect, authorize('admin'), deleteInstitution);
+router.post('/', protectWithClerk, authorizeRole('admin', 'institution'), createInstitution);
+router.put('/:id', protectWithClerk, authorizeRole('admin', 'institution'), updateInstitution);
+router.delete('/:id', protectWithClerk, authorizeRole('admin'), deleteInstitution);
 
 export default router;
