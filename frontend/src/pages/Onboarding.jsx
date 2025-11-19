@@ -1,10 +1,11 @@
+// src/pages/Onboarding.jsx
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useUser } from '@clerk/clerk-react';
 import { useInstitutionsAPI } from '../api/institutions';
 import { useAuthAPI } from '../api/auth';
 import { useAuthStore } from '../store/authStore';
-import { Building2, Shield, Save } from 'lucide-react';
+import { Building2, Save, Plus, Search } from 'lucide-react';
 
 export function Onboarding() {
   const { user: clerkUser } = useUser();
@@ -14,62 +15,63 @@ export function Onboarding() {
   const setAuth = useAuthStore((state) => state.setAuth);
 
   const [institutions, setInstitutions] = useState([]);
-  const [role, setRole] = useState('institution'); // Only institution role for this flow
-  const [institutionId, setInstitutionId] = useState('');
   const [loading, setLoading] = useState(false);
+  
+  // Mode: 'select' or 'create'
+  const [mode, setMode] = useState('select');
+  
+  // Selection state
+  const [institutionId, setInstitutionId] = useState('');
+  
+  // Creation state
+  const [newInst, setNewInst] = useState({
+    name: '',
+    type: 'university',
+    country: '',
+    city: '',
+    contactEmail: ''
+  });
 
-  // 1. Load Institutions
   useEffect(() => {
-    const loadData = async () => {
-      const response = await institutionsAPI.getAll();
-      if (response.success) {
-        setInstitutions(response.data);
-      }
-    };
-    loadData();
+    loadInstitutions();
   }, []);
 
-  // 2. Handle Form Submit
+  const loadInstitutions = async () => {
+    const response = await institutionsAPI.getAll();
+    if (response.success) setInstitutions(response.data);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
 
-    console.log('🚀 Starting onboarding submission...');
-    console.log('📝 Data to send:', { role, institutionId });
-
     try {
-      // Update profile in your backend
+      let targetInstitutionId = institutionId;
+
+      // 1. Create institution if in 'create' mode
+      if (mode === 'create') {
+        const createRes = await institutionsAPI.create(newInst);
+        if (!createRes.success) throw new Error(createRes.message);
+        targetInstitutionId = createRes.data._id;
+      }
+
+      // 2. Update User Profile
       const response = await authAPI.updateProfile({
-        role,
-        institutionId: role === 'institution' ? institutionId : null
+        role: 'institution',
+        institutionId: targetInstitutionId
       });
 
-      console.log('📥 API Response:', response);
-
       if (response.success) {
-        console.log('✅ Profile updated successfully:', response.data);
-        console.log('🔄 About to update auth store...');
-
-        // Update local store
-        // Note: We pass null for token as Clerk handles the token,
-        // but we update the user object with the new role/institution
         setAuth(response.data, null);
-
-        console.log('🔄 Auth store updated, navigating to dashboard...');
-
-        // Small delay to ensure state updates
-        setTimeout(() => {
-          console.log('🚀 Executing navigation to /app/dashboard');
-          navigate('/app/dashboard');
-        }, 100);
-
+        // Reload Clerk user to sync metadata if needed
+        await clerkUser.reload();
+        navigate('/app/dashboard');
       } else {
-        console.error('❌ API returned success=false:', response);
-        alert(`Failed to update profile: ${response.message || 'Unknown error'}`);
+        alert(`Failed: ${response.message}`);
       }
     } catch (error) {
-      console.error('❌ Onboarding failed with exception:', error);
-      alert(`Failed to update profile: ${error.message}`);
+      console.error(error);
+      alert('An error occurred during setup.');
     } finally {
       setLoading(false);
     }
@@ -78,62 +80,111 @@ export function Onboarding() {
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-lg shadow-lg p-8 w-full max-w-md">
-        <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold text-gray-900">Complete Your Profile</h1>
-          <p className="text-gray-600 mt-2">
-            Welcome, {clerkUser?.firstName}! Please finish setting up your account.
-          </p>
+        <div className="text-center mb-6">
+          <h1 className="text-2xl font-bold text-gray-900">Welcome, {clerkUser?.firstName}</h1>
+          <p className="text-gray-600">Let's set up your institution access</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Role Selection (Institution Only) */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Account Type
-            </label>
-            <div className="p-4 border border-blue-600 bg-blue-50 rounded-lg flex flex-col items-center justify-center">
-              <Building2 className="w-6 h-6 mb-2 text-blue-700" />
-              <span className="text-sm font-medium text-blue-700">Institution</span>
-            </div>
-            <p className="text-xs text-gray-500 mt-2">
-              All users are registered as institutions. Contact admin for special access.
-            </p>
+        {/* Toggle Switch */}
+        <div className="flex bg-gray-100 p-1 rounded-lg mb-6">
+          <button
+            type="button"
+            onClick={() => setMode('select')}
+            className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${
+              mode === 'select' ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            Select Existing
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode('create')}
+            className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${
+              mode === 'create' ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            Create New
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="p-4 border border-blue-100 bg-blue-50 rounded-lg flex items-center mb-4">
+            <Building2 className="w-5 h-5 text-blue-600 mr-3" />
+            <span className="text-sm text-blue-800">Role: Institution Administrator</span>
           </div>
 
-          {/* Institution Selection */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Select Your Institution
-            </label>
-            <select
-              value={institutionId}
-              onChange={(e) => setInstitutionId(e.target.value)}
-              required
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            >
-              <option value="">-- Select Institution --</option>
-              {institutions.map((inst) => (
-                <option key={inst._id} value={inst._id}>
-                  {inst.name}
-                </option>
-              ))}
-            </select>
-            <p className="text-xs text-gray-500 mt-2">
-              Don't see your institution? Contact support for assistance.
-            </p>
-          </div>
+          {mode === 'select' ? (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Select Institution</label>
+              <div className="relative">
+                <Search className="absolute left-3 top-2.5 text-gray-400 w-4 h-4" />
+                <select
+                  value={institutionId}
+                  onChange={(e) => setInstitutionId(e.target.value)}
+                  required={mode === 'select'}
+                  className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">-- Choose --</option>
+                  {institutions.map((inst) => (
+                    <option key={inst._id} value={inst._id}>{inst.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
+              <input
+                placeholder="Institution Name"
+                required={mode === 'create'}
+                value={newInst.name}
+                onChange={e => setNewInst({...newInst, name: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md"
+              />
+              <select
+                value={newInst.type}
+                onChange={e => setNewInst({...newInst, type: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md"
+              >
+                <option value="university">University</option>
+                <option value="college">College</option>
+                <option value="technical">Technical Institute</option>
+              </select>
+              <input
+                placeholder="Country"
+                required={mode === 'create'}
+                value={newInst.country}
+                onChange={e => setNewInst({...newInst, country: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md"
+              />
+              <input
+                placeholder="City"
+                required={mode === 'create'}
+                value={newInst.city}
+                onChange={e => setNewInst({...newInst, city: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md"
+              />
+              <input
+                type="email"
+                placeholder="Contact Email"
+                required={mode === 'create'}
+                value={newInst.contactEmail}
+                onChange={e => setNewInst({...newInst, contactEmail: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md"
+              />
+            </div>
+          )}
 
           <button
             type="submit"
-            disabled={loading || !institutionId}
-            className="w-full flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            disabled={loading || (mode === 'select' && !institutionId)}
+            className="w-full flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 mt-6"
           >
-            {loading ? (
-              <span className="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></span>
-            ) : (
-              <Save className="w-4 h-4 mr-2" />
+            {loading ? 'Processing...' : (
+              <>
+                <Save className="w-4 h-4 mr-2" />
+                {mode === 'create' ? 'Create & Join' : 'Join Institution'}
+              </>
             )}
-            Complete Setup
           </button>
         </form>
       </div>

@@ -19,21 +19,13 @@ const setUserRole = async () => {
     await mongoose.connect(process.env.MONGO_URI);
     console.log('Connected to MongoDB');
 
-    // Update user role - replace with actual email and desired role
-    const email = 'your-email@example.com'; // Replace with actual user email
-    const role = 'institution'; // or 'admin'
-
-    const user = await User.findOneAndUpdate(
-      { email },
-      { role },
-      { new: true }
+    // Update all users with 'viewer' role to 'institution'
+    const result = await User.updateMany(
+      { role: 'viewer' },
+      { role: 'institution' }
     );
 
-    if (user) {
-      console.log(`✅ Updated user ${email} to role: ${role}`);
-    } else {
-      console.log(`❌ User ${email} not found`);
-    }
+    console.log(`✅ Updated ${result.modifiedCount} users from 'viewer' to 'institution'`);
 
     await mongoose.disconnect();
   } catch (error) {

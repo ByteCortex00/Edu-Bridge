@@ -6,12 +6,15 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { connectDB } from './config/db.js';
 import mlService from './services/mlService.js'; // ✅ NEW: ML Service import
+import './workers/embeddingWorker.js'; //  Start the worker
+import { embeddingQueue } from './config/queue.js'; // Ensure queue is init
 
 // Import middleware
 import { errorHandler, notFound } from './middleware/errorHandler.js';
 
 // Import routes
 import authRoutes from './routes/authRoutes.js';
+import webhookRoutes from './routes/webhookRoutes.js';
 import institutionRoutes from './routes/institutionRoutes.js';
 import curriculumRoutes from './routes/curriculumRoutes.js';
 import jobRoutes from './routes/jobRoutes.js';
@@ -25,12 +28,15 @@ dotenv.config({ path: path.join(__dirname, '.env') });
 // Initialize express app
 const app = express();
 
+// ✅ MOUNT WEBHOOKS HERE (Before express.json)
+app.use('/api/webhooks', webhookRoutes);
+
 // Middleware
 app.use(cors({
   origin: process.env.FRONTEND_URL || 'http://localhost:5173',
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization', 'svix-id', 'svix-timestamp', 'svix-signature'] // Add svix headers
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -51,6 +57,7 @@ app.get('/', (req, res) => {
     version: '1.0.0',
     endpoints: {
       auth: '/api/auth',
+      webhooks: '/api/webhooks',
       institutions: '/api/institutions',
       curricula: '/api/curricula',
       jobs: '/api/jobs',

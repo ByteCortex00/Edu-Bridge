@@ -32,6 +32,22 @@ export const useJobsAPI = () => {
     bulkPopulate: async (config) => {
       const response = await apiClient.post('/jobs/bulk-populate', config);
       return response;
+    },
+
+    // Admin Methods
+    generateEmbeddings: async (config) => {
+      const response = await apiClient.post('/jobs/generate-embeddings', config);
+      return response;
+    },
+
+    getEmbeddingStatus: async () => {
+      const response = await apiClient.get('/jobs/embedding-status');
+      return response;
+    },
+
+    testML: async () => {
+      const response = await apiClient.get('/jobs/test-ml');
+      return response;
     }
   };
 };

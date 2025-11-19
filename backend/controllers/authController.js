@@ -138,10 +138,8 @@ export const syncClerkUser = async (req, res) => {
     if (!role) {
       if (email.includes('admin')) {
         role = 'admin';
-      } else if (email.includes('institution') || email.includes('uni') || email.includes('edu')) {
-        role = 'institution';
       } else {
-        role = 'viewer';
+        role = 'institution';
       }
     }
 

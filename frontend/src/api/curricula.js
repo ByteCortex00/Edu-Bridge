@@ -37,6 +37,17 @@ export const useCurriculaAPI = () => {
     addCourse: async (id, courseData) => {
       const response = await apiClient.post(`/curricula/${id}/courses`, courseData);
       return response;
+    },
+
+    // Admin Methods
+    generateEmbeddings: async (config) => {
+      const response = await apiClient.post('/curricula/generate-embeddings', config);
+      return response;
+    },
+
+    getEmbeddingStatus: async () => {
+      const response = await apiClient.get('/curricula/embedding-status');
+      return response;
     }
   };
 };

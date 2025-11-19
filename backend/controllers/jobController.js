@@ -7,6 +7,7 @@ import skillsExtractor from "../services/skillExtractor.js";
 import mlService from "../services/mlService.js";
 import gapAnalysisService from '../services/gapAnalysis.js';
 import { mlConfig } from '../config/mlConfig.js';
+import { embeddingQueue } from '../config/queue.js';
 
 /**
  * Supported countries with their Adzuna country codes
@@ -337,15 +338,22 @@ export const bulkPopulateJobs = async (req, res) => {
     // If no categories provided, fetch popular ones first
     let categoriesToFetch = categories;
     if (categoriesToFetch.length === 0) {
-      // Default popular categories
+      // UPDATED: Added new Adzuna categories to default fetch list
       categoriesToFetch = [
         "it-jobs",
-        "engineering-jobs", 
+        "engineering-jobs",
         "healthcare-nursing-jobs",
         "teaching-jobs",
         "scientific-qa-jobs",
         "accounting-finance-jobs",
-        "sales-jobs"
+        "sales-jobs",
+        // NEW ONES:
+        "legal-jobs",
+        "hr-jobs",
+        "pr-advertising-marketing-jobs",
+        "logistics-warehouse-jobs",
+        "customer-services-jobs",
+        "creative-design-jobs"
       ];
     }
 
@@ -777,113 +785,41 @@ export const getJobCategories = async (req, res) => {
  */
 export const generateJobEmbeddings = async (req, res) => {
   try {
-    const { 
-      limit = 100, 
-      batchSize = 10,
-      forceRegenerate = false 
-    } = req.body;
+    const { limit = 100, forceRegenerate = false } = req.body;
 
-    console.log(`🔄 Starting embedding generation for up to ${limit} jobs...`);
-
-    const query = forceRegenerate 
-      ? {} 
-      : { 
+    const query = forceRegenerate
+      ? {}
+      : {
           $or: [
             { embedding: { $exists: false } },
             { embedding: null },
-            { embedding: { $size: 0 } },
             { embeddingVersion: { $ne: mlConfig.model.version } }
           ]
         };
 
-    // Select all required fields for embedding generation
-    const jobs = await JobPosting.find(query)
-      .limit(limit)
-      .select('title description embedding embeddingGenerated embeddingVersion embeddingError requiredSkills company location category contractType');
+    const jobs = await JobPosting.find(query).limit(limit).select('_id');
 
     if (jobs.length === 0) {
-      return res.status(200).json({
-        success: true,
-        message: 'No jobs need embedding generation',
-        stats: { processed: 0, succeeded: 0, failed: 0 }
-      });
+      return res.status(200).json({ success: true, message: 'No jobs need processing' });
     }
 
-    console.log(`📊 Found ${jobs.length} jobs needing embeddings`);
-    let succeeded = 0;
-    let failed = 0;
-    const errors = [];
+    // ✅ Push tasks to Redis Queue
+    const jobsData = jobs.map(job => ({
+      name: 'generate-job-embedding',
+      data: { jobId: job._id }
+    }));
 
-    // Process in batches to avoid memory issues
-    for (let i = 0; i < jobs.length; i += batchSize) {
-      const batch = jobs.slice(i, i + batchSize);
-      
-      console.log(`🔄 Processing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(jobs.length / batchSize)}...`);
-
-      for (const job of batch) {
-        try {
-          const weightedTexts = job.getTextForEmbedding();
-
-          // Check if we have sufficient text for embedding
-          if (!weightedTexts || weightedTexts.length === 0 || !weightedTexts.some(wt => wt.text && wt.text.trim().length > 0)) {
-            console.log(`⚠️ Skipping job ${job._id}: insufficient text for embedding`);
-            continue;
-          }
-
-          const embedding = await mlService.generateWeightedEmbedding(weightedTexts);
-
-          // Validate embedding dimensions
-          if (!embedding || embedding.length !== mlConfig.model.embeddingDimensions) {
-            throw new Error(`Invalid embedding dimensions: expected ${mlConfig.model.embeddingDimensions}, got ${embedding?.length || 0}`);
-          }
-
-          // Update job with embedding
-          await JobPosting.findByIdAndUpdate(job._id, {
-            embedding,
-            embeddingGenerated: new Date(),
-            embeddingVersion: mlConfig.model.version,
-            embeddingError: null
-          });
-
-          succeeded++;
-          console.log(`✅ Embedded job ${succeeded}/${jobs.length}: ${job.title.substring(0, 50)}...`);
-
-        } catch (error) {
-          failed++;
-          errors.push(`Job ${job._id}: ${error.message}`);
-          
-          // Mark job as having embedding error
-          await JobPosting.findByIdAndUpdate(job._id, {
-            embeddingError: error.message
-          });
-
-          console.error(`❌ Failed to embed job ${job._id}:`, error.message);
-        }
-
-        // Small delay to avoid overwhelming the system
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
-    }
+    await embeddingQueue.addBulk(jobsData);
 
     res.status(200).json({
       success: true,
-      message: `Embedding generation completed: ${succeeded} succeeded, ${failed} failed`,
-      stats: {
-        total: jobs.length,
-        processed: succeeded + failed,
-        succeeded,
-        failed
-      },
-      errors: errors.slice(0, 10) // Return first 10 errors
+      message: `Queued ${jobs.length} jobs for embedding generation`,
+      note: "Processing is happening in the background."
     });
 
   } catch (error) {
-    console.error('Generate job embeddings error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to generate job embeddings',
-      error: error.message
-    });
+    console.error('Queue error:', error);
+    res.status(500).json({ success: false, message: 'Failed to queue jobs' });
   }
 };
 

@@ -164,88 +164,128 @@ export const createCurriculum = async (req, res) => {
 };
 
 /**
- * @desc    Update curriculum WITH embedding regeneration
+ * @desc    Update curriculum AND sync courses (Create/Update/Delete)
  * @route   PUT /api/curricula/:id
  * @access  Private (Admin/Institution)
  */
 export const updateCurriculum = async (req, res) => {
   try {
+    const { id } = req.params;
+    const { courses: coursesData, ...curriculumData } = req.body;
+
+    // 1. Update basic Curriculum details
     const curriculum = await Curriculum.findByIdAndUpdate(
-      req.params.id,
-      req.body,
+      id,
+      curriculumData,
       { new: true, runValidators: true }
     );
 
     if (!curriculum) {
-      return res.status(404).json({
-        success: false,
-        message: 'Curriculum not found'
-      });
+      return res.status(404).json({ success: false, message: 'Curriculum not found' });
     }
 
-    // Regenerate embedding after update if ML fields were modified
-    const mlRelatedFields = ['programName', 'department', 'degree', 'description', 'targetIndustries', 'courses'];
-    const shouldRegenerateEmbedding = Object.keys(req.body).some(field => 
-      mlRelatedFields.includes(field)
-    );
+    // 2. Sync Courses if provided
+    if (coursesData && Array.isArray(coursesData)) {
+      // A. Identify existing courses in DB
+      const existingCourses = await Course.find({ curriculumId: id });
+      const existingCourseIds = existingCourses.map(c => c._id.toString());
 
-    if (shouldRegenerateEmbedding) {
-      try {
-        if (mlService.isModelReady()) {
-          console.log(`🔄 Regenerating embedding for updated curriculum: ${curriculum.programName}`);
-          
-          // Populate courses to build comprehensive text
-          await curriculum.populate('courses');
-          
-          const weightedTexts = await curriculum.getTextForEmbedding();
-          
-          if (!weightedTexts || weightedTexts.length === 0 || !weightedTexts.some(wt => wt.text && wt.text.trim().length > 0)) {
-            throw new Error('Insufficient text data for embedding generation after update');
-          }
+      // B. Separate input into Updates and Creates
+      const coursesToUpdate = [];
+      const coursesToCreate = [];
+      const inputCourseIds = [];
 
-          const embedding = await mlService.generateWeightedEmbedding(weightedTexts);
-
-          if (!embedding || embedding.length !== mlConfig.model.embeddingDimensions) {
-            throw new Error(`Invalid embedding dimensions after update: expected ${mlConfig.model.embeddingDimensions}, got ${embedding?.length || 0}`);
-          }
-
-          curriculum.embedding = embedding;
-          curriculum.embeddingGenerated = new Date();
-          curriculum.embeddingVersion = mlConfig.model.version;
-          curriculum.embeddingError = null;
-          
-          await curriculum.save();
-          
-          console.log(`✅ Embedding regenerated for curriculum: ${curriculum.programName}`);
+      for (const course of coursesData) {
+        if (course._id && existingCourseIds.includes(course._id)) {
+          coursesToUpdate.push(course);
+          inputCourseIds.push(course._id);
+        } else {
+          coursesToCreate.push({
+             ...course,
+             curriculumId: id,
+             // Handle skills if passed, or default empty
+             skills: course.skills || []
+          });
         }
-      } catch (embeddingError) {
-        console.error(`❌ Failed to regenerate embedding:`, embeddingError.message);
-        curriculum.embeddingError = embeddingError.message;
-        await curriculum.save();
-        // Continue - don't fail the update if embedding fails
       }
+
+      // C. Perform Database Operations
+      const operations = [];
+
+      // Bulk Write: Updates
+      coursesToUpdate.forEach(course => {
+        operations.push({
+          updateOne: {
+            filter: { _id: course._id },
+            update: { $set: course }
+          }
+        });
+      });
+
+      // Bulk Write: Deletes (Courses in DB but not in Input)
+      const idsToDelete = existingCourseIds.filter(dbId => !inputCourseIds.includes(dbId));
+      if (idsToDelete.length > 0) {
+        operations.push({
+          deleteMany: {
+            filter: { _id: { $in: idsToDelete } }
+          }
+        });
+      }
+
+      // Execute Bulk Operations
+      if (operations.length > 0) {
+        await Course.bulkWrite(operations);
+      }
+
+      // Insert New Courses (insertMany is often faster/easier than bulkWrite for creation)
+      if (coursesToCreate.length > 0) {
+        const newCourses = await Course.insertMany(coursesToCreate);
+        const newIds = newCourses.map(c => c._id.toString());
+        inputCourseIds.push(...newIds);
+      }
+
+      // D. Update Curriculum's course references
+      curriculum.courses = inputCourseIds;
+      await curriculum.save();
+    }
+
+    // 3. Regenerate Embedding (since courses/content likely changed)
+    // ... (Copy the exact same embedding generation logic from createCurriculum here)
+    try {
+      if (mlService.isModelReady()) {
+        console.log(`🔄 Regenerating embedding for updated curriculum: ${curriculum.programName}`);
+        await curriculum.populate('courses');
+        const weightedTexts = await curriculum.getTextForEmbedding();
+
+        if (weightedTexts && weightedTexts.length > 0) {
+           const embedding = await mlService.generateWeightedEmbedding(weightedTexts);
+           if (embedding && embedding.length === mlConfig.model.embeddingDimensions) {
+             curriculum.embedding = embedding;
+             curriculum.embeddingGenerated = new Date();
+             curriculum.embeddingVersion = mlConfig.model.version;
+             curriculum.embeddingError = null;
+             await curriculum.save();
+             console.log(`✅ Embedding regenerated`);
+           }
+        }
+      }
+    } catch (err) {
+      console.error("Embedding error:", err.message);
+      // Don't fail request
     }
 
     res.status(200).json({
       success: true,
       data: curriculum,
-      message: 'Curriculum updated successfully'
+      message: 'Curriculum and courses updated successfully'
     });
+
   } catch (error) {
     console.error('Update curriculum error:', error);
-    
     if (error.name === 'ValidationError') {
-      return res.status(400).json({
-        success: false,
-        message: 'Validation error',
-        errors: Object.values(error.errors).map(err => err.message)
-      });
+        return res.status(400).json({ success: false, message: 'Validation Error', error: error.message });
     }
-
-    res.status(500).json({
-      success: false,
-      message: 'Server error updating curriculum'
-    });
+    res.status(500).json({ success: false, message: 'Server error updating curriculum' });
   }
 };
 

@@ -102,7 +102,15 @@ curriculumSchema.methods.getTextForEmbedding = async function() {
       if (course.skills && Array.isArray(course.skills)) {
         course.skills.forEach(skill => {
           // Consider skills with technical categories as hard skills
-          const technicalCategories = ['programming', 'database', 'cloud', 'devops', 'security', 'data science', 'ai/ml', 'engineering', 'technical', 'software', 'development'];
+          const technicalCategories = [
+            'programming', 'database', 'cloud', 'devops', 'security',
+            'data science', 'ai/ml', 'engineering', 'technical', 'software',
+            'development', 'webdevelopment', 'mobile',
+            // NEW CATEGORIES:
+            'finance', 'marketing', 'sales', 'legal', 'operations',
+            'healthcare', 'education', 'design', 'businessanalysis',
+            'humanresources', 'customersupport', 'administration'
+          ];
           if (technicalCategories.some(cat => skill.category?.toLowerCase().includes(cat))) {
             hardSkills.push(skill.name);
           }

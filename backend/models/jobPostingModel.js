@@ -113,7 +113,15 @@ jobPostingSchema.methods.getTextForEmbedding = function() {
   // Required skills (technical ones)
   if (this.requiredSkills && this.requiredSkills.length > 0) {
     const technicalSkills = this.requiredSkills.filter(skill => {
-      const technicalCategories = ['programming', 'database', 'cloud', 'devops', 'security', 'data science', 'ai/ml', 'engineering', 'technical', 'software', 'development', 'system'];
+      const technicalCategories = [
+        'programming', 'database', 'cloud', 'devops', 'security',
+        'data science', 'ai/ml', 'engineering', 'technical', 'software',
+        'development', 'system', 'webdevelopment', 'mobile', 'testing',
+        // NEW CATEGORIES ADDED BELOW:
+        'finance', 'marketing', 'sales', 'legal', 'operations',
+        'healthcare', 'education', 'design', 'businessanalysis',
+        'humanresources', 'customersupport', 'administration', 'logistics'
+      ];
       return technicalCategories.some(cat => skill.category?.toLowerCase().includes(cat)) && skill.importance === 'required';
     });
 

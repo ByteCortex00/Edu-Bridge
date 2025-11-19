@@ -2,60 +2,34 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { useAnalyticsAPI } from '../api/analytics';
+import { PageLayout } from '../components/layout/PageLayout'; // ✅ Import PageLayout
 import { 
-  BarChart3, 
-  BookOpen, 
-  Briefcase, 
-  TrendingUp, 
-  ArrowRight,
-  CheckCircle,
-  AlertCircle,
-  Clock
+  BookOpen, Briefcase, TrendingUp, CheckCircle, Plus, ArrowRight 
 } from 'lucide-react';
 
-// Helper Component: Stat Card
-const StatCard = ({ title, value, change, icon, positive }) => {
+// 1. Compact Stat Card (Reduced padding p-6 -> p-4)
+const StatCard = ({ title, value, change, icon, color = "blue" }) => {
+  const colorClasses = {
+    blue: "bg-blue-50 text-blue-600",
+    green: "bg-emerald-50 text-emerald-600",
+    purple: "bg-purple-50 text-purple-600",
+    orange: "bg-orange-50 text-orange-600"
+  };
+
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-      <div className="p-6 pb-2 flex flex-row items-center justify-between space-y-0">
-        <h3 className="text-sm font-medium text-gray-900">{title}</h3>
-        <div className="text-gray-500">
+    <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+      <div className="flex justify-between items-start mb-2">
+        <div className={`p-2 rounded-lg ${colorClasses[color]}`}>
           {icon}
         </div>
+        {change && (
+          <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
+            {change}
+          </span>
+        )}
       </div>
-      <div className="p-6 pt-0">
-        <div className="text-2xl font-bold text-gray-900">{value}</div>
-        <p className={`text-xs ${positive ? 'text-green-600' : 'text-gray-500'}`}>
-          {change}
-        </p>
-      </div>
-    </div>
-  );
-};
-
-// Helper Component: Action Button
-const ActionButton = ({ title, description, href }) => {
-  return (
-    <Link to={href}>
-      <div className="p-4 border border-gray-200 rounded-lg hover:bg-blue-50 transition-colors cursor-pointer group bg-white h-full">
-        <div className="flex items-start justify-between">
-          <div>
-            <h3 className="font-semibold mb-1 text-gray-900 group-hover:text-blue-600 transition-colors">{title}</h3>
-            <p className="text-sm text-gray-500">{description}</p>
-          </div>
-          <ArrowRight className="h-5 w-5 text-gray-400 group-hover:text-blue-600 transition-colors" />
-        </div>
-      </div>
-    </Link>
-  );
-};
-
-// Helper Component: Skill Item
-const SkillItem = ({ skill, count }) => {
-  return (
-    <div className="flex items-center justify-between py-3 border-b border-gray-100 last:border-0">
-      <span className="font-medium text-gray-900">{skill}</span>
-      <span className="text-sm text-gray-500">{count}</span>
+      <h3 className="text-slate-500 text-xs font-semibold uppercase tracking-wide mb-0.5">{title}</h3>
+      <p className="text-xl md:text-2xl font-bold text-slate-900 leading-tight">{value}</p>
     </div>
   );
 };
@@ -64,207 +38,129 @@ export function InstitutionDashboard() {
   const { user } = useAuthStore();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
-  
-  // State for Dashboard Data
   const [stats, setStats] = useState({
     activePrograms: 0,
     curriculaAnalyzed: 0,
     jobPostingsTracked: 0,
-    matchRate: 0,
-    matchRateChange: 'Avg across all programs',
-    activeProgramsChange: 'Total active',
-    jobsChange: 'Last 30 days'
+    matchRate: 0
   });
-
   const [programOverview, setProgramOverview] = useState([]);
   const [topSkills, setTopSkills] = useState([]);
-
   const analyticsAPI = useAnalyticsAPI();
 
   useEffect(() => {
-    loadDashboardData();
+    const loadData = async () => {
+      try {
+        if (user?.institutionId) {
+          const res = await analyticsAPI.getDashboard(user.institutionId);
+          if (res.success) {
+            const m = res.data.institutionMetrics || {};
+            setStats({
+              activePrograms: m.totalPrograms || 0,
+              curriculaAnalyzed: m.analyzedPrograms || 0,
+              jobPostingsTracked: m.recentJobPostings || 0,
+              matchRate: m.avgMatchRate || 0
+            });
+            setProgramOverview(res.data.programAnalyses || []);
+            setTopSkills(res.data.topSkills || []);
+          }
+        }
+      } catch (e) { console.error(e); } 
+      finally { setLoading(false); }
+    };
+    loadData();
   }, [user]);
 
-  const loadDashboardData = async () => {
-    try {
-      if (user?.institutionId) {
-        const dashboardResponse = await analyticsAPI.getDashboard(user.institutionId);
+  // Define the Header Button
+  const headerAction = (
+    <Link 
+      to="/app/curricula" 
+      className="inline-flex items-center justify-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors shadow-sm shadow-blue-200"
+    >
+      <Plus className="w-4 h-4 mr-2" />
+      New Curriculum
+    </Link>
+  );
 
-        if (dashboardResponse.success) {
-          const data = dashboardResponse.data;
-          const metrics = data.institutionMetrics || {};
-
-          // 1. Update Stats Cards
-          setStats({
-            activePrograms: metrics.totalPrograms || 0,
-            curriculaAnalyzed: metrics.analyzedPrograms || 0,
-            jobPostingsTracked: metrics.recentJobPostings ? metrics.recentJobPostings.toLocaleString() : '0',
-            matchRate: metrics.avgMatchRate || 0,
-            matchRateChange: 'Average match rate',
-            activeProgramsChange: 'Active programs',
-            jobsChange: 'New jobs (30 days)'
-          });
-
-          // 2. Update Program Overview List
-          setProgramOverview(data.programAnalyses || []);
-
-          // 3. Update Top Skills
-          const skillsData = (data.topSkills || []).map(skill => ({
-            skill: skill.name,
-            count: `${skill.demand} mentions`
-          }));
-          setTopSkills(skillsData);
-        }
-      }
-    } catch (error) {
-      console.error('Error loading dashboard data:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const getMatchRateColor = (rate) => {
-    if (!rate) return 'text-gray-400';
-    if (rate >= 80) return 'text-green-600';
-    if (rate >= 60) return 'text-yellow-600';
-    return 'text-red-600';
-  };
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-      </div>
-    );
-  }
+  if (loading) return <div className="p-8 text-center text-slate-400 text-sm">Loading dashboard...</div>;
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Welcome back, {user?.name || 'User'}</h1>
-        <p className="text-gray-600">Overview of your institution's curricular performance</p>
+    <PageLayout
+      title="Dashboard"
+      description="Overview of your institution's performance"
+      headerContent={headerAction}
+    >
+      {/* Stats Grid - Reduced Gap (gap-6 -> gap-4) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard title="Active Programs" value={stats.activePrograms} icon={<BookOpen className="w-5 h-5" />} color="blue" />
+        <StatCard title="Curricula Analyzed" value={stats.curriculaAnalyzed} icon={<CheckCircle className="w-5 h-5" />} color="green" />
+        <StatCard title="Avg Match Rate" value={`${stats.matchRate}%`} icon={<TrendingUp className="w-5 h-5" />} color="purple" />
+        <StatCard title="Market Data" value={stats.jobPostingsTracked.toLocaleString()} icon={<Briefcase className="w-5 h-5" />} color="orange" />
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          title="Active Programs"
-          value={stats.activePrograms}
-          change={stats.activeProgramsChange}
-          icon={<BookOpen className="h-4 w-4" />}
-        />
-        <StatCard
-          title="Curricula Analyzed"
-          value={stats.curriculaAnalyzed}
-          change="Processed by AI"
-          icon={<BarChart3 className="h-4 w-4" />}
-        />
-        <StatCard
-          title="Job Market Data"
-          value={stats.jobPostingsTracked}
-          change={stats.jobsChange}
-          icon={<Briefcase className="h-4 w-4" />}
-        />
-        <StatCard
-          title="Avg. Match Rate"
-          value={`${stats.matchRate}%`}
-          change={stats.matchRateChange}
-          icon={<TrendingUp className="h-4 w-4" />}
-          positive={true}
-        />
-      </div>
-
-      {/* Quick Actions */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-        <div className="p-6 pb-4 border-b border-gray-100">
-          <h3 className="text-lg font-semibold text-gray-900">Quick Actions</h3>
-          <p className="text-sm text-gray-500">Common tasks and shortcuts</p>
-        </div>
-        <div className="p-6">
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            <ActionButton
-              title="Manage Curricula"
-              description="Add, edit or remove program curricula"
-              href="/app/curricula"
-            />
-             <ActionButton
-              title="Run New Analysis"
-              description="Analyze a curriculum against current market"
-              href="/app/curricula"
-            />
-            <ActionButton
-              title="View Reports"
-              description="Detailed analytics and gap reports"
-              href="/app/analytics"
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Main Content Grid */}
-      <div className="grid gap-6 lg:grid-cols-3">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
-        {/* Left Column: Program Overview Table (Spans 2 columns) */}
-        <div className="lg:col-span-2 bg-white rounded-lg shadow-sm border border-gray-200 flex flex-col">
-          <div className="p-6 border-b border-gray-100 flex justify-between items-center">
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900">Curricula Overview</h3>
-              <p className="text-sm text-gray-500">Performance status of your offered programs</p>
-            </div>
-            <Link to="/app/curricula" className="text-blue-600 text-sm hover:underline font-medium">
-              View All
+        {/* Main Table Card */}
+        <div className="lg:col-span-2 bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col">
+          <div className="px-5 py-3 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+            <h3 className="font-semibold text-slate-800 text-sm">Curricula Status</h3>
+            <Link to="/app/curricula" className="text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center">
+              View All <ArrowRight className="w-3 h-3 ml-1" />
             </Link>
           </div>
           
-          <div className="flex-1 overflow-auto">
+          <div className="overflow-x-auto">
             <table className="w-full text-sm text-left">
-              <thead className="text-xs text-gray-500 uppercase bg-gray-50 border-b">
+              <thead className="bg-slate-50 text-slate-500 font-medium border-b border-slate-100">
                 <tr>
-                  <th className="px-6 py-3">Program Name</th>
-                  <th className="px-6 py-3">Degree</th>
-                  <th className="px-6 py-3">Status</th>
-                  <th className="px-6 py-3">Match Rate</th>
-                  <th className="px-6 py-3 text-right">Action</th>
+                  <th className="px-5 py-3 text-xs uppercase tracking-wider w-1/2">Program</th>
+                  <th className="px-5 py-3 hidden sm:table-cell text-xs uppercase tracking-wider">Status</th>
+                  <th className="px-5 py-3 text-xs uppercase tracking-wider">Score</th>
+                  <th className="px-5 py-3 text-right text-xs uppercase tracking-wider">Action</th>
                 </tr>
               </thead>
-              <tbody>
-                {programOverview.length > 0 ? (
-                  programOverview.map((program) => (
-                    <tr key={program.curriculumId} className="bg-white border-b hover:bg-gray-50">
-                      <td className="px-6 py-4 font-medium text-gray-900">
-                        {program.programName}
-                        <div className="text-xs text-gray-500 font-normal">{program.department}</div>
-                      </td>
-                      <td className="px-6 py-4 capitalize">{program.degree}</td>
-                      <td className="px-6 py-4">
-                        {program.isAnalyzed ? (
-                          <span className="inline-flex items-center text-green-700 bg-green-100 px-2 py-1 rounded-full text-xs">
-                            <CheckCircle className="w-3 h-3 mr-1" /> Analyzed
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center text-gray-600 bg-gray-100 px-2 py-1 rounded-full text-xs">
-                            <Clock className="w-3 h-3 mr-1" /> Pending
-                          </span>
-                        )}
-                      </td>
-                      <td className={`px-6 py-4 font-semibold ${getMatchRateColor(program.matchRate)}`}>
-                        {program.matchRate ? `${program.matchRate}%` : '-'}
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <button
-                          onClick={() => navigate(`/app/analysis/${program.curriculumId}`)}
-                          className="text-blue-600 hover:text-blue-900 font-medium"
-                        >
-                          {program.isAnalyzed ? 'View Report' : 'Analyze'}
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan="5" className="px-6 py-8 text-center text-gray-500">
-                      No curricula found. <Link to="/app/curricula" className="text-blue-600 hover:underline">Add your first program</Link>.
+              <tbody className="divide-y divide-slate-100">
+                {programOverview.slice(0, 5).map((p) => ( // Limit to 5 items for compactness
+                  <tr key={p.curriculumId} className="hover:bg-slate-50/50 transition-colors">
+                    <td className="px-5 py-3">
+                      <div className="font-medium text-slate-900 truncate max-w-[200px]">{p.programName}</div>
+                      <div className="text-[10px] text-slate-500 capitalize">{p.degree}</div>
                     </td>
+                    <td className="px-5 py-3 hidden sm:table-cell">
+                      {p.isAnalyzed ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-100 uppercase tracking-wide">
+                          Analyzed
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200 uppercase tracking-wide">
+                          Pending
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-5 py-3">
+                      <div className="flex items-center">
+                        <div className="w-12 bg-slate-100 rounded-full h-1.5 mr-2">
+                          <div 
+                            className={`h-1.5 rounded-full ${p.matchRate >= 70 ? 'bg-emerald-500' : p.matchRate >= 50 ? 'bg-yellow-500' : 'bg-slate-400'}`} 
+                            style={{ width: `${p.matchRate || 0}%` }}
+                          ></div>
+                        </div>
+                        <span className="font-medium text-slate-700 text-xs">{p.matchRate || 0}%</span>
+                      </div>
+                    </td>
+                    <td className="px-5 py-3 text-right">
+                      <button 
+                        onClick={() => navigate(`/app/analysis/${p.curriculumId}`)}
+                        className="text-blue-600 hover:text-blue-800 font-medium text-xs hover:underline"
+                      >
+                        View
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                 {programOverview.length === 0 && (
+                  <tr>
+                    <td colSpan="4" className="px-5 py-8 text-center text-slate-400 text-sm">No programs found.</td>
                   </tr>
                 )}
               </tbody>
@@ -272,39 +168,31 @@ export function InstitutionDashboard() {
           </div>
         </div>
 
-        {/* Right Column: Top Skills (Spans 1 column) */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 h-fit">
-          <div className="p-6 border-b border-gray-100">
-            <h3 className="text-lg font-semibold text-gray-900">Market Demand</h3>
-            <p className="text-sm text-gray-500">Top skills requested in job postings</p>
-          </div>
-          <div className="p-6">
-            <div className="space-y-1">
-              {topSkills.length > 0 ? (
-                topSkills.map((item, index) => (
-                  <SkillItem
-                    key={index}
-                    skill={item.skill}
-                    count={item.count}
-                  />
-                ))
-              ) : (
-                <div className="text-center py-6 text-gray-500">
-                  <AlertCircle className="w-8 h-8 mx-auto mb-2 text-gray-300" />
-                  <p>No market data available.</p>
+        {/* Side Panel: Market Skills */}
+        <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 h-fit">
+          <h3 className="font-semibold text-slate-800 mb-3 text-sm">Trending Skills</h3>
+          <div className="space-y-2">
+            {topSkills.slice(0, 5).map((skill, i) => (
+              <div key={i} className="flex items-center justify-between group py-1">
+                <div className="flex items-center">
+                  <span className="w-5 text-xs font-bold text-slate-300 group-hover:text-blue-500 transition-colors">#{i + 1}</span>
+                  <span className="text-slate-700 font-medium text-xs md:text-sm">{skill.name}</span>
                 </div>
-              )}
-            </div>
-            <div className="mt-6 pt-4 border-t border-gray-100">
-              <Link to="/app/analytics" className="flex items-center justify-center text-sm text-blue-600 hover:text-blue-800 font-medium">
-                View Full Market Analysis <ArrowRight className="w-4 h-4 ml-1" />
-              </Link>
-            </div>
+                <span className="text-[10px] font-medium text-slate-500 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">
+                  {skill.demand}
+                </span>
+              </div>
+            ))}
+            {topSkills.length === 0 && <p className="text-slate-400 text-xs">No data available yet.</p>}
+          </div>
+          <div className="mt-4 pt-3 border-t border-slate-100">
+             <Link to="/app/analytics" className="flex items-center justify-center w-full py-1.5 border border-slate-200 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors">
+               View Full Report
+             </Link>
           </div>
         </div>
-
       </div>
-    </div>
+    </PageLayout>
   );
 }
 

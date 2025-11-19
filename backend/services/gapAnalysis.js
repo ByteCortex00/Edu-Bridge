@@ -190,174 +190,87 @@ class GapAnalysisService {
   }
 
   /**
-   * Get relevant jobs with ML filtering
-   * Enhanced version that uses semantic similarity
+   * REPLACED: Get relevant jobs using Native Atlas Vector Search
    */
   async getRelevantJobsWithML(curriculum, curriculumEmbedding, options = {}) {
-    const { 
-      limit = 100, 
-      daysBack = 90, 
+    const {
+      limit = 100,
+      daysBack = 90,
       targetIndustry,
-      similarityThreshold = mlConfig.similarity.default,
-      fetchMultiplier = 3 // Fetch 3x more jobs for filtering
+      similarityThreshold = 0.6 // Note: Vector search scores might be normalized differently
     } = options;
-    
-    console.log('\n🤖 Starting ML-enhanced job filtering...');
-    console.log(`📏 Similarity threshold: ${similarityThreshold}`);
-    
-    // Calculate the date threshold
+
+    console.log('\n🚀 Running Atlas Vector Search...');
+
+    // 1. Build Pre-filter (Date & Category)
     const dateThreshold = new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000);
-    
-    // Build base query
-    let baseQuery = {
+
+    const filter = {
       postedDate: { $gte: dateThreshold }
     };
-    
-    // Add industry filter if provided
+
+    // Handle target industry filter
     if (targetIndustry) {
-      baseQuery.$or = [
-        { category: targetIndustry },
-        { category: { $regex: targetIndustry, $options: 'i' } }
-      ];
+      filter.category = targetIndustry;
     } else if (curriculum.targetIndustries && curriculum.targetIndustries.length > 0) {
-      // Use curriculum target industries
-      baseQuery.$or = curriculum.targetIndustries.flatMap(industry => [
-        { category: industry },
-        { category: { $regex: industry, $options: 'i' } }
-      ]);
+       // Atlas Search "in" operator syntax for arrays
+       filter.category = { $in: curriculum.targetIndustries };
     }
-    
-    // Fetch initial candidate jobs (get more for ML filtering)
-    const fetchLimit = limit * fetchMultiplier;
-    const candidateJobs = await JobPosting.find(baseQuery)
-      .limit(fetchLimit)
-      .sort({ postedDate: -1 })
-      .select('+embedding title company category description requiredSkills postedDate');
-    
-    console.log(`📥 Initial candidate jobs: ${candidateJobs.length}`);
-    
-    if (candidateJobs.length === 0) {
-      console.log('⚠️ No candidate jobs found, falling back to basic filtering');
+
+    try {
+      // 2. Execute Vector Search Aggregation
+      const pipeline = [
+        {
+          $vectorSearch: {
+            index: "vector_index", // Must match Atlas Index Name
+            path: "embedding",
+            queryVector: curriculumEmbedding,
+            numCandidates: limit * 10, // Scan more candidates for accuracy
+            limit: limit, // Return top N
+            filter: filter // Apply pre-filter
+          }
+        },
+        {
+          $project: {
+            title: 1,
+            company: 1,
+            category: 1,
+            description: 1,
+            requiredSkills: 1,
+            postedDate: 1,
+            score: { $meta: "vectorSearchScore" } // Get similarity score
+          }
+        }
+      ];
+
+      const jobs = await JobPosting.aggregate(pipeline);
+
+      console.log(`✅ Vector Search found ${jobs.length} relevant jobs`);
+      if (jobs.length > 0) {
+        console.log(`🎯 Top Score: ${jobs[0].score.toFixed(4)}`);
+      }
+
+      // 3. Standardize output format
+      // Rename 'score' to 'similarityScore' to match your existing frontend logic
+      const formattedJobs = jobs.map(job => ({
+        ...job,
+        similarityScore: job.score
+      }));
+
+      return {
+        jobs: formattedJobs,
+        mlStats: {
+          method: "Atlas Vector Search",
+          totalFound: jobs.length,
+          topScore: jobs.length > 0 ? jobs[0].score : 0
+        }
+      };
+
+    } catch (error) {
+      console.error("❌ Vector Search Failed:", error.message);
+      console.log("⚠️ Falling back to basic database query...");
       return this.getRelevantJobs(curriculum, options);
     }
-    
-    // Separate jobs with and without embeddings
-    const jobsWithEmbeddings = candidateJobs.filter(job => 
-      job.embedding && Array.isArray(job.embedding) && job.embedding.length > 0
-    );
-    
-    const jobsWithoutEmbeddings = candidateJobs.filter(job => 
-      !job.embedding || !Array.isArray(job.embedding) || job.embedding.length === 0
-    );
-    
-    console.log(`📊 Jobs with embeddings: ${jobsWithEmbeddings.length}`);
-    console.log(`📊 Jobs without embeddings: ${jobsWithoutEmbeddings.length}`);
-    
-    let filteredJobs = [];
-    let mlStats = {
-      totalCandidates: candidateJobs.length,
-      jobsWithEmbeddings: jobsWithEmbeddings.length,
-      jobsWithoutEmbeddings: jobsWithoutEmbeddings.length,
-      similarityThreshold,
-      effectiveThreshold: similarityThreshold, // Will be adjusted if needed
-      mlFiltered: 0,
-      categoryFiltered: 0
-    };
-    
-    // Filter jobs with embeddings using semantic similarity
-    if (jobsWithEmbeddings.length > 0) {
-      console.log('🔍 Filtering jobs by semantic similarity...');
-      
-      const similarityScores = jobsWithEmbeddings.map(job => {
-        const similarity = mlService.calculateSimilarity(curriculumEmbedding, job.embedding);
-        return { job, similarity };
-      });
-      
-      // Sort all jobs by similarity to see the distribution
-      similarityScores.sort((a, b) => b.similarity - a.similarity);
-      
-      // 🆕 Debug: Show similarity score distribution
-      console.log('\n📊 Similarity Score Distribution:');
-      console.log(`   🥇 Highest: ${similarityScores[0].similarity.toFixed(4)}`);
-      console.log(`   📊 Median: ${similarityScores[Math.floor(similarityScores.length / 2)].similarity.toFixed(4)}`);
-      console.log(`   📉 Lowest: ${similarityScores[similarityScores.length - 1].similarity.toFixed(4)}`);
-      console.log(`   📈 Average: ${(similarityScores.reduce((sum, s) => sum + s.similarity, 0) / similarityScores.length).toFixed(4)}`);
-      
-      // Count how many jobs pass different thresholds
-      const thresholds = [0.3, 0.4, 0.5, 0.6, 0.7];
-      console.log('\n📊 Jobs passing different thresholds:');
-      thresholds.forEach(threshold => {
-        const count = similarityScores.filter(s => s.similarity >= threshold).length;
-        console.log(`   ${threshold.toFixed(1)}: ${count} jobs (${((count / similarityScores.length) * 100).toFixed(1)}%)`);
-      });
-      
-      // 🆕 Dynamic threshold adjustment if no jobs pass
-      let effectiveThreshold = similarityThreshold;
-      let relevantJobs = similarityScores.filter(({ similarity }) => similarity >= effectiveThreshold);
-      
-      if (relevantJobs.length === 0) {
-        // Calculate a reasonable threshold (e.g., top 50% or median)
-        const medianSimilarity = similarityScores[Math.floor(similarityScores.length / 2)].similarity;
-        effectiveThreshold = Math.min(medianSimilarity, 0.5); // Cap at 0.5 maximum
-        
-        console.log(`\n⚠️  No jobs passed threshold ${similarityThreshold.toFixed(2)}`);
-        console.log(`🔄 Adjusting threshold to ${effectiveThreshold.toFixed(4)} (median similarity)`);
-        
-        relevantJobs = similarityScores.filter(({ similarity }) => similarity >= effectiveThreshold);
-      }
-      
-      // Take top N jobs
-      relevantJobs = relevantJobs.slice(0, limit);
-      
-      mlStats.mlFiltered = relevantJobs.length;
-      mlStats.effectiveThreshold = effectiveThreshold;
-      
-      console.log(`\n✅ ML-filtered jobs: ${relevantJobs.length}`);
-      
-      if (relevantJobs.length > 0) {
-        console.log(`🎯 Top similarity: ${relevantJobs[0].similarity.toFixed(4)}`);
-        console.log(`📉 Bottom similarity: ${relevantJobs[relevantJobs.length - 1].similarity.toFixed(4)}`);
-        
-        // Show top 5 matched jobs
-        console.log('\n🏆 Top 5 matched jobs:');
-        relevantJobs.slice(0, 5).forEach((item, idx) => {
-          console.log(`   ${idx + 1}. ${item.job.title} - ${item.job.category} (${item.similarity.toFixed(4)})`);
-        });
-      }
-      
-      filteredJobs = relevantJobs.map(({ job, similarity }) => {
-        const jobObj = job.toObject ? job.toObject() : job;
-        return { ...jobObj, similarityScore: similarity };
-      });
-    }
-    
-    // Supplement with category-based jobs if needed
-    if (filteredJobs.length < limit && jobsWithoutEmbeddings.length > 0) {
-      const needed = limit - filteredJobs.length;
-      console.log(`🔄 Supplementing with ${Math.min(needed, jobsWithoutEmbeddings.length)} category-based jobs`);
-      
-      const supplementalJobs = jobsWithoutEmbeddings
-        .slice(0, needed)
-        .map(job => job.toObject ? job.toObject() : job);
-      
-      mlStats.categoryFiltered = supplementalJobs.length;
-      filteredJobs = [...filteredJobs, ...supplementalJobs];
-    }
-    
-    // Final fallback
-    if (filteredJobs.length === 0) {
-      console.log('🔄 ML filtering yielded no results, falling back to category-based filtering');
-      return this.getRelevantJobs(curriculum, options);
-    }
-    
-    console.log(`✅ Final job count: ${filteredJobs.length}`);
-    console.log(`   - ML filtered: ${mlStats.mlFiltered}`);
-    console.log(`   - Category filtered: ${mlStats.categoryFiltered}`);
-    
-    return {
-      jobs: filteredJobs,
-      mlStats
-    };
   }
 
   /**

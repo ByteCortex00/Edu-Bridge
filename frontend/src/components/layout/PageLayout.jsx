@@ -1,3 +1,5 @@
+import React from 'react';
+
 export function PageLayout({
   title,
   description,
@@ -8,33 +10,47 @@ export function PageLayout({
   const hasHeader = title || description || headerContent;
 
   return (
-    <div className={`h-full flex flex-col ${className}`}>
-      {/* Sticky Header Section */}
+    <div className={`flex flex-col h-full bg-slate-50 ${className}`}>
+      
+      {/* 1. Fixed Header (Non-scrolling) */}
       {hasHeader && (
-        <div className="sticky top-0 z-10 bg-gray-50 flex-shrink-0 space-y-6 pb-6 border-b border-gray-200">
-          {(title || description) && (
-            <div>
-              {title && (
-                <h1 className="text-3xl font-bold text-gray-900">{title}</h1>
+        <div className="flex-shrink-0 bg-white border-b border-slate-200 shadow-sm z-10">
+          <div className="px-4 sm:px-6 lg:px-8 py-5">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+              
+              {/* Title Section */}
+              {(title || description) && (
+                <div className="flex-1 min-w-0">
+                  {title && (
+                    <h1 className="text-xl md:text-2xl font-bold text-slate-900 tracking-tight">
+                      {title}
+                    </h1>
+                  )}
+                  {description && (
+                    <p className="mt-1 text-sm text-slate-500 truncate">
+                      {description}
+                    </p>
+                  )}
+                </div>
               )}
-              {description && (
-                <p className="text-gray-600 mt-1">{description}</p>
-              )}
-            </div>
-          )}
 
-          {headerContent && (
-            <div>
-              {headerContent}
+              {/* Action/Search Section - Now part of the solid header */}
+              {headerContent && (
+                <div className="flex-shrink-0 w-full md:w-auto">
+                  {headerContent}
+                </div>
+              )}
             </div>
-          )}
+          </div>
         </div>
       )}
 
-      {/* Scrollable Content Area */}
-      <div className="flex-1 overflow-y-auto">
-        <div className="space-y-6">
-          {children}
+      {/* 2. Scrollable Content Area */}
+      <div className="flex-1 overflow-y-auto min-h-0 scroll-smooth">
+        <div className="px-4 sm:px-6 lg:px-8 py-8">
+          <div className="max-w-7xl mx-auto space-y-6">
+            {children}
+          </div>
         </div>
       </div>
     </div>
