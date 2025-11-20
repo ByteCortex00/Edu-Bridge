@@ -8,8 +8,16 @@
 export const mlConfig = {
   // Model settings
   model: {
-    name: 'Xenova/all-mpnet-base-v2', // Higher accuracy model
-    embeddingDimensions: 768, // Correct dimensions for this model
+    // Allow overriding model via ENV. 
+    // Recommended for local/production: 'Xenova/all-mpnet-base-v2' (High Accuracy, High RAM)
+    // Recommended for free-tier hosting: 'Xenova/all-MiniLM-L6-v2' (Lower Accuracy, Low RAM)
+    name: process.env.ML_MODEL_NAME || 'Xenova/all-mpnet-base-v2',
+    
+    // Adjust dimensions based on model
+    // mpnet-base-v2 = 768 dimensions
+    // all-MiniLM-L6-v2 = 384 dimensions
+    // We auto-detect this in the service, but defaults are good
+    embeddingDimensions: process.env.ML_MODEL_NAME?.includes('MiniLM') ? 384 : 768, 
     version: 'weighted-v1'
   },
 
