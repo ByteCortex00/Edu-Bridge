@@ -32,11 +32,28 @@ const app = express();
 app.use('/api/webhooks', webhookRoutes);
 
 // Middleware
+// Define allowed origins
+const allowedOrigins = [
+  'http://localhost:5173',                  // Local development
+  'https://edu-bridge-2b36.vercel.app',     // Your specific Vercel deployment
+  process.env.FRONTEND_URL                  // Fallback to env var
+].filter(Boolean);                          // Remove any undefined values
+
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      console.log('Blocked by CORS:', origin); // Helpful for debugging
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'svix-id', 'svix-timestamp', 'svix-signature'] // Add svix headers
+  allowedHeaders: ['Content-Type', 'Authorization', 'svix-id', 'svix-timestamp', 'svix-signature']
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
