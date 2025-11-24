@@ -35,19 +35,25 @@ app.use('/api/webhooks', webhookRoutes);
 // Define allowed origins
 const allowedOrigins = [
   'http://localhost:5173',                  // Local development
-  'https://edu-bridge-2b36.vercel.app',     // Your specific Vercel deployment
+  'https://edu-bridge-2b36.vercel.app',     // Old Vercel deployment
+  'https://edu-bridge-bytecortex00s-projects.vercel.app', // Current Vercel deployment
   process.env.FRONTEND_URL                  // Fallback to env var
 ].filter(Boolean);                          // Remove any undefined values
 
 app.use(cors({
   origin: function (origin, callback) {
     // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
-    
+    if (!origin) {
+      console.log('CORS: Allowing request with no origin');
+      return callback(null, true);
+    }
+
     if (allowedOrigins.includes(origin)) {
+      console.log(`CORS: Allowing origin: ${origin}`);
       callback(null, true);
     } else {
-      console.log('Blocked by CORS:', origin); // Helpful for debugging
+      console.log(`CORS: Blocked origin: ${origin}`);
+      console.log('Allowed origins:', allowedOrigins);
       callback(new Error('Not allowed by CORS'));
     }
   },
