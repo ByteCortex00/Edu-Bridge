@@ -1,7 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authAPI } from '../../api/auth';
-import { institutionsAPI } from '../../api/institutions';
 import { useAuthStore } from '../../store/authStore';
 import { UserPlus } from 'lucide-react';
 
@@ -11,54 +10,24 @@ export function RegisterForm() {
     email: '',
     password: '',
     confirmPassword: '',
-    role: 'viewer', // Default to viewer
-    institutionId: '', 
+    role: 'viewer', // Default
   });
-  const [institutions, setInstitutions] = useState([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [loadingInstitutions, setLoadingInstitutions] = useState(true);
   const navigate = useNavigate();
   const setAuth = useAuthStore((state) => state.setAuth);
-
-  // Load institutions on component mount
-  useEffect(() => {
-    const loadInstitutions = async () => {
-      try {
-        const response = await institutionsAPI.getAll();
-        if (response.success && response.data.length > 0) {
-          setInstitutions(response.data);
-        }
-      } catch (err) {
-        console.error('Failed to load institutions:', err);
-      } finally {
-        setLoadingInstitutions(false);
-      }
-    };
-    loadInstitutions();
-  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    console.log('📝 Frontend: Starting registration for:', formData.email);
 
     if (formData.password !== formData.confirmPassword) {
-      console.log('❌ Frontend: Passwords do not match');
       setError('Passwords do not match');
       return;
     }
 
     if (formData.password.length < 6) {
-      console.log('❌ Frontend: Password too short');
       setError('Password must be at least 6 characters');
-      return;
-    }
-
-    // Conditional validation: Institution ID is REQUIRED for 'institution' role
-    if (formData.role === 'institution' && !formData.institutionId) {
-      console.log('❌ Frontend: Institution required for institution role');
-      setError('Please select an institution to register with this role.');
       return;
     }
 
@@ -70,29 +39,28 @@ export function RegisterForm() {
         email: formData.email,
         password: formData.password,
         role: formData.role,
-        // Only send institutionId if the role is 'institution'
-        institutionId: formData.role === 'institution' ? formData.institutionId : undefined,
+        // institutionId is purposefully omitted here to be handled in Onboarding
       };
-      console.log('📤 Frontend: Sending registration payload:', payload);
 
       const response = await authAPI.register(payload);
-      console.log('📥 Frontend: Registration response:', response);
 
       if (response.success) {
-        console.log('✅ Frontend: Registration successful, auto-logging in and navigating to /dashboard');
-        // Auto-login after registration
+        // Auto-login
         setAuth(response.data.user, response.data.token);
-        // FIX: Add the delay here as well to prevent the registration redirect loop
         await new Promise(resolve => setTimeout(resolve, 50));
-        navigate('/dashboard');
+
+        // 🚀 Redirect Logic:
+        // If they chose 'institution', send them to Onboarding.
+        // Otherwise, send them to Dashboard.
+        if (formData.role === 'institution') {
+          navigate('/app/onboarding');
+        } else {
+          navigate('/app/dashboard');
+        }
       } else {
-        console.log('❌ Frontend: Registration failed:', response.message);
-        // This catches custom error messages returned by the backend (e.g., email already exists)
         setError(response.message || 'Registration failed');
       }
     } catch (err) {
-      console.log('❌ Frontend: Registration error:', err.message);
-      // This catches 400 Bad Request if validation fails on the server
       setError(err.message || 'Registration failed');
     } finally {
       setLoading(false);
@@ -101,26 +69,8 @@ export function RegisterForm() {
 
   const handleInputChange = (e) => {
     const { id, value } = e.target;
-    let newState = { ...formData, [id]: value };
-
-    // Reset institutionId if role is switched to 'viewer'
-    if (id === 'role' && value === 'viewer') {
-      newState.institutionId = '';
-    }
-    
-    // Set formData state
-    setFormData(newState);
+    setFormData({ ...formData, [id]: value });
   };
-
-  if (loadingInstitutions) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-green-50">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-      </div>
-    );
-  }
-  
-  const isInstitutionRole = formData.role === 'institution';
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-green-50">
@@ -222,46 +172,19 @@ export function RegisterForm() {
               <option value="viewer">Viewer (General Access)</option>
               <option value="institution">Institution User (Curriculum Management)</option>
             </select>
+            <p className="text-xs text-gray-500 mt-1">
+              {formData.role === 'institution'
+                ? "You'll set up your institution details in the next step."
+                : "View-only access to public data."}
+            </p>
           </div>
-
-          {/* Institution Select Field (CONDITIONAL) */}
-          {isInstitutionRole && (
-            <div>
-              <label htmlFor="institutionId" className="block text-sm font-medium text-gray-700 mb-1">
-                Link Institution
-              </label>
-              <select
-                id="institutionId"
-                value={formData.institutionId}
-                onChange={handleInputChange}
-                required={isInstitutionRole}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
-              >
-                {institutions.length === 0 ? (
-                  <option value="">No Institutions Found</option>
-                ) : (
-                  <>
-                    <option value="">-- Select your Institution --</option>
-                    {institutions.map(inst => (
-                      <option key={inst._id} value={inst._id}>
-                        {inst.name}
-                      </option>
-                    ))}
-                  </>
-                )}
-              </select>
-              {institutions.length === 0 && (
-                <p className="text-xs text-red-500 mt-1">Cannot register as Institution User without institutions.</p>
-              )}
-            </div>
-          )}
 
           <button
             type="submit"
-            disabled={loading || (isInstitutionRole && institutions.length === 0)}
-            className="w-full bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            disabled={loading}
+            className="w-full bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors mt-2"
           >
-            {loading ? 'Registering...' : 'Register'}
+            {loading ? 'Registering...' : 'Create Account'}
           </button>
         </form>
 

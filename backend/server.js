@@ -153,6 +153,8 @@ const startServer = async () => {
 };
 
 // ✅ Execute startup
-startServer();
+if (process.env.NODE_ENV !== 'test') {
+  startServer();
+}
 
 export default app;

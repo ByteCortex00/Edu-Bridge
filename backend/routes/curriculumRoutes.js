@@ -16,19 +16,24 @@ import { protectWithClerk, authorizeRole } from '../middleware/clerkAuth.js';
 
 const router = express.Router();
 
-router.post('/generate-embeddings', generateCurriculumEmbeddings);
-router.get('/embedding-status', getCurriculumEmbeddingStatus);
-router.post('/:id/regenerate-embedding', regenerateCurriculumEmbedding);
+// --- 🔒 PROTECTED ROUTES (All routes require login now) ---
+// Apply protection globally or per route
+router.use(protectWithClerk);
 
-// Public routes
-router.get('/', getCurricula);
-router.get('/:id', getCurriculum);
-router.get('/:id/skills', getCurriculumSkills);
+// 1. Read Operations (Now Enforced)
+router.get('/', authorizeRole('admin', 'institution'), getCurricula);
+router.get('/:id', authorizeRole('admin', 'institution'), getCurriculum);
+router.get('/:id/skills', authorizeRole('admin', 'institution'), getCurriculumSkills);
 
-// Protected routes (Admin/Institution roles)
-router.post('/', protectWithClerk, authorizeRole('admin', 'institution'), createCurriculum);
-router.put('/:id', protectWithClerk, authorizeRole('admin', 'institution'), updateCurriculum);
-router.delete('/:id', protectWithClerk, authorizeRole('admin', 'institution'), deleteCurriculum);
-router.post('/:id/courses', protectWithClerk, authorizeRole('admin', 'institution'), addCourse);
+// 2. Write Operations (Admin/Institution)
+router.post('/', authorizeRole('admin', 'institution'), createCurriculum);
+router.put('/:id', authorizeRole('admin', 'institution'), updateCurriculum);
+router.delete('/:id', authorizeRole('admin', 'institution'), deleteCurriculum);
+router.post('/:id/courses', authorizeRole('admin', 'institution'), addCourse);
+
+// 3. Admin-Only Operations
+router.post('/generate-embeddings', authorizeRole('admin'), generateCurriculumEmbeddings);
+router.get('/embedding-status', authorizeRole('admin'), getCurriculumEmbeddingStatus);
+router.post('/:id/regenerate-embedding', authorizeRole('admin'), regenerateCurriculumEmbedding);
 
 export default router;

@@ -1,7 +1,8 @@
-import { Outlet, Link, useLocation } from 'react-router-dom';
+import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { UserButton, useUser } from '@clerk/clerk-react';
 import { useClerkSync } from '../../hooks/useClerkSync';
-import { useState } from 'react';
+import { useAuthStore } from '../../store/authStore';
+import { useEffect, useState } from 'react';
 import {
   LayoutDashboard,
   Building2,
@@ -15,10 +16,30 @@ import {
 
 export function MainLayout() {
   const location = useLocation();
-  const { user } = useUser(); // Get Clerk user data for the sidebar display
+  const navigate = useNavigate();
+  const { user: clerkUser } = useUser();
+  const { user: dbUser } = useAuthStore(); // Get the synced DB user
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  
+
+  // Sync Clerk data with DB
   useClerkSync();
+
+  // 🚀 Enforce Onboarding Logic
+  useEffect(() => {
+    // Only proceed if we have the synced DB user data
+    if (dbUser) {
+      const isInstitutionUser = dbUser.role === 'institution';
+      // Check if institutionId is missing (null, undefined, or empty string)
+      const isMissingInstitution = !dbUser.institutionId;
+      const isOnboardingPage = location.pathname === '/app/onboarding';
+
+      // If they are an institution user, have no institution set, and aren't on the onboarding page...
+      if (isInstitutionUser && isMissingInstitution && !isOnboardingPage) {
+        console.log('Redirecting to onboarding...');
+        navigate('/app/onboarding', { replace: true });
+      }
+    }
+  }, [dbUser, location.pathname, navigate]);
 
   const navItems = [
     { to: '/app/dashboard', icon: LayoutDashboard, label: 'Dashboard' },

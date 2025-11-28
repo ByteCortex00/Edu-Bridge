@@ -6,17 +6,39 @@ import mlService from '../services/mlService.js';
 import { mlConfig } from '../config/mlConfig.js';
 
 /**
- * @desc    Get all curricula
+ * @desc    Get all curricula (Scoped by User Role)
  * @route   GET /api/curricula
- * @access  Public
+ * @access  Private (Admin/Institution)
  */
 export const getCurricula = async (req, res) => {
   try {
-    const { institutionId, department, degree, includeEmbeddings = false } = req.query;
-    
-    // Build filter object
+    const { department, degree, includeEmbeddings = false } = req.query;
+
+    // 1. Initialize filter
     const filter = {};
-    if (institutionId) filter.institutionId = institutionId;
+
+    // 2. Enforce Strict Access Control
+    if (req.user.role === 'institution') {
+      // 🔒 STRICT: Institution users can ONLY see their own curricula
+      if (!req.user.institutionId) {
+        return res.status(403).json({
+          success: false,
+          message: 'User is not linked to any institution.'
+        });
+      }
+      filter.institutionId = req.user.institutionId;
+    }
+    else if (req.user.role === 'admin') {
+      // 🔓 ADMIN: Can see all, or filter by specific institution if provided in query
+      if (req.query.institutionId) {
+        filter.institutionId = req.query.institutionId;
+      }
+    } else {
+        // Fallback for any other role (should be caught by middleware, but safe to add)
+        return res.status(403).json({ success: false, message: 'Access denied' });
+    }
+
+    // 3. Apply optional filters
     if (department) filter.department = new RegExp(department, 'i');
     if (degree) filter.degree = degree;
 
@@ -47,14 +69,14 @@ export const getCurricula = async (req, res) => {
 };
 
 /**
- * @desc    Get single curriculum
+ * @desc    Get single curriculum (Scoped by User Role)
  * @route   GET /api/curricula/:id
- * @access  Public
+ * @access  Private (Admin/Institution)
  */
 export const getCurriculum = async (req, res) => {
   try {
     const { includeEmbedding = false } = req.query;
-    
+
     let query = Curriculum.findById(req.params.id)
       .populate('institutionId')
       .populate('courses');
@@ -70,6 +92,18 @@ export const getCurriculum = async (req, res) => {
         success: false,
         message: 'Curriculum not found'
       });
+    }
+
+    // 🔒 STRICT ACCESS CHECK
+    // If user is 'institution', ensure they own this curriculum
+    if (req.user.role === 'institution') {
+      // Compare ObjectIds as strings
+      if (curriculum.institutionId._id.toString() !== req.user.institutionId.toString()) {
+        return res.status(403).json({
+          success: false,
+          message: 'Not authorized to view this curriculum'
+        });
+      }
     }
 
     res.status(200).json({
@@ -407,7 +441,7 @@ export const addCourse = async (req, res) => {
 /**
  * @desc    Get curriculum skills summary
  * @route   GET /api/curricula/:id/skills
- * @access  Public
+ * @access  Private (Admin/Institution)
  */
 export const getCurriculumSkills = async (req, res) => {
   try {
