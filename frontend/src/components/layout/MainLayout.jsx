@@ -17,23 +17,19 @@ import {
 export function MainLayout() {
   const location = useLocation();
   const navigate = useNavigate();
+  // ✅ We are using 'clerkUser' here
   const { user: clerkUser } = useUser();
-  const { user: dbUser } = useAuthStore(); // Get the synced DB user
+  const { user: dbUser } = useAuthStore(); 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  // Sync Clerk data with DB
   useClerkSync();
 
-  // 🚀 Enforce Onboarding Logic
   useEffect(() => {
-    // Only proceed if we have the synced DB user data
     if (dbUser) {
       const isInstitutionUser = dbUser.role === 'institution';
-      // Check if institutionId is missing (null, undefined, or empty string)
       const isMissingInstitution = !dbUser.institutionId;
       const isOnboardingPage = location.pathname === '/app/onboarding';
 
-      // If they are an institution user, have no institution set, and aren't on the onboarding page...
       if (isInstitutionUser && isMissingInstitution && !isOnboardingPage) {
         console.log('Redirecting to onboarding...');
         navigate('/app/onboarding', { replace: true });
@@ -54,7 +50,6 @@ export function MainLayout() {
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden font-sans text-slate-900">
       
-      {/* ================= DESKTOP SIDEBAR ================= */}
       <aside className="hidden md:flex w-64 flex-col bg-slate-900 text-white shadow-xl z-30 flex-shrink-0 transition-all duration-300">
         <div className="flex items-center h-16 px-6 border-b border-slate-800">
           <TrendingUp className="w-6 h-6 text-blue-500 mr-2" />
@@ -78,9 +73,7 @@ export function MainLayout() {
           ))}
         </nav>
 
-        {/* ✅ NEW: Clerk User Profile Section */}
         <div className="p-4 border-t border-slate-800">
-          {/* App Settings Link */}
           <Link 
             to="/app/settings" 
             className="flex items-center px-3 py-2 mb-2 text-sm font-medium text-slate-400 rounded-lg hover:bg-slate-800 hover:text-white transition-colors"
@@ -89,7 +82,6 @@ export function MainLayout() {
             Global Settings
           </Link>
           
-          {/* Clerk User Button & Info */}
           <div className="flex items-center gap-3 px-3 py-3 rounded-xl bg-slate-800/50 hover:bg-slate-800 transition-all duration-200 border border-slate-700/50">
             <div className="flex-shrink-0">
               <UserButton 
@@ -104,28 +96,25 @@ export function MainLayout() {
               />
             </div>
             <div className="flex flex-col min-w-0 overflow-hidden">
+              {/* ✅ FIXED: Use 'clerkUser' instead of 'user' */}
               <span className="text-sm font-semibold text-white truncate">
-                {user?.fullName || user?.firstName || 'User'}
+                {clerkUser?.fullName || clerkUser?.firstName || 'User'}
               </span>
               <span className="text-[10px] text-slate-400 truncate">
-                {user?.primaryEmailAddress?.emailAddress}
+                {clerkUser?.primaryEmailAddress?.emailAddress}
               </span>
             </div>
           </div>
         </div>
       </aside>
 
-      {/* ================= MAIN AREA ================= */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        
-        {/* Mobile Header */}
         <header className="md:hidden bg-white border-b border-slate-200 h-16 flex items-center justify-between px-4 sticky top-0 z-20">
           <div className="flex items-center">
             <TrendingUp className="w-6 h-6 text-blue-600 mr-2" />
             <span className="font-bold text-slate-900 text-lg">EduBridge</span>
           </div>
           <div className="flex items-center gap-4">
-            {/* Mobile User Button */}
             <UserButton afterSignOutUrl="/sign-in" appearance={{ elements: { avatarBox: "w-8 h-8" } }} />
             <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
               {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
@@ -133,7 +122,6 @@ export function MainLayout() {
           </div>
         </header>
 
-        {/* Mobile Menu Overlay */}
         {mobileMenuOpen && (
           <div className="md:hidden absolute top-16 left-0 right-0 bg-white border-b border-slate-200 z-40 shadow-lg animate-in slide-in-from-top-2">
             <nav className="p-4 space-y-2">
@@ -164,7 +152,6 @@ export function MainLayout() {
           </div>
         )}
 
-        {/* Content Wrapper */}
         <main className="flex-1 h-full overflow-hidden relative">
           <Outlet />
         </main>
