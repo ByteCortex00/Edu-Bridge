@@ -58,6 +58,7 @@ pids/
 
 yarn.lock
 package-lock.json
+!backend/package-lock.json
 
 # VS Code
 .vscode/
